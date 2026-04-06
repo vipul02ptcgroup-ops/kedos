@@ -22,7 +22,7 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
     <>
       {/* Announcement bar */}
       <div className="bg-cocoa-800 text-cream-100 text-xs text-center py-2 px-4 font-body tracking-wide">
-        🌿 Free shipping on orders over ₹999 &nbsp;·&nbsp; Organic & Safe for Baby
+        We're currently undergoing maintenance. Please check back soon.
       </div>
 
       <header className="sticky top-0 z-50 bg-blush-400/30 backdrop-blur-sm border-b border-cream-200 shadow-sm">
@@ -30,7 +30,7 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
           <div className="flex items-center justify-between h-16 lg:h-20">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group">
-              <img src='/Images/Logo.png' className='h-14 w-auto'/>
+              <img src='/Images/Logo.png' className='h-14 w-auto' />
             </Link>
 
             {/* Desktop nav */}
