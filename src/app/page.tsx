@@ -1,18 +1,22 @@
 'use client';
 import Link from 'next/link';
-import { ArrowRight, Shield, Leaf, Truck, Heart, Star, ChevronRight, Baby, Shirt, Puzzle, Bed, Backpack, Moon, Bath, Milk } from 'lucide-react';
+import { ArrowRight, Shield, Leaf, Truck, Heart, Star, ChevronRight, Baby, Shirt, Puzzle, Bed, Backpack, Moon, Bath, Milk, Tag } from 'lucide-react';
 import { CartItem, Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import CartDrawer from '@/components/cart/CartDrawer';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { subscribeProducts } from '@/lib/products';
+import { CategoryDoc, subscribeCategoryDocs } from '@/lib/categories';
+import { subscribeAuth } from '@/lib/auth';
+import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
+import { User as FirebaseUser } from 'firebase/auth';
 
 const FEATURES = [
   { icon: Shield, title: 'Safety Certified', desc: 'Every product meets the highest safety standards' },
   { icon: Leaf, title: '100% Organic', desc: 'Natural materials, gentle on delicate baby skin' },
-  { icon: Truck, title: 'Fast Delivery', desc: 'Free shipping on orders over ₹999' },
+  { icon: Truck, title: 'Fast Delivery', desc: 'Free shipping on orders over ?999' },
   { icon: Heart, title: 'Parent Tested', desc: 'Loved and approved by thousands of parents' },
 ];
 
@@ -26,32 +30,82 @@ export default function HomePage() {
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<CategoryDoc[]>([]);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
 
   useEffect(() => {
     const unsub = subscribeProducts(setProducts);
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsub = subscribeCategoryDocs(setCategories);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeAuth(setUser);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeUserWishlistProductIds(user?.uid, setWishlistIds);
+    return () => unsub();
+  }, [user?.uid]);
+
   const addToCart = (productId: string) => {
-    const product = products.find(p => p.id === productId);
+    const product = products.find((p) => p.id === productId);
     if (!product) return;
-    setCartItems(prev => {
-      const existing = prev.find(i => i.id === productId);
-      if (existing) return prev.map(i => i.id === productId ? { ...i, quantity: i.quantity + 1 } : i);
+    setCartItems((prev) => {
+      const existing = prev.find((i) => i.id === productId);
+      if (existing) return prev.map((i) => (i.id === productId ? { ...i, quantity: i.quantity + 1 } : i));
       return [...prev, { ...product, quantity: 1 }];
     });
     setCartOpen(true);
   };
 
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
+  const iconByName: Record<string, typeof Tag> = {
+    shirt: Shirt,
+    puzzle: Puzzle,
+    bed: Bed,
+    backpack: Backpack,
+    moon: Moon,
+    bath: Bath,
+    milk: Milk,
+    tag: Tag,
+  };
+  const categoryColors = ['bg-blush-400', 'bg-sky-100', 'bg-cream-200', 'bg-blush-400', 'bg-purple-100', 'bg-blue-100', 'bg-amber-100'];
+  const dynamicCategories = useMemo(() => {
+    const iconNameByCategory = new Map(
+      categories.map((c) => [c.name.trim().toLowerCase(), (c.iconName || 'Tag').trim().toLowerCase()])
+    );
+    const namesFromDocs = categories.map((c) => c.name).filter(Boolean);
+    const namesFromProducts = products.map((p) => p.category).filter(Boolean);
+    const deduped = Array.from(new Set([...namesFromDocs, ...namesFromProducts]));
+    return deduped.sort((a, b) => a.localeCompare(b)).map((name, idx) => ({
+      name,
+      icon: iconByName[iconNameByCategory.get(name.trim().toLowerCase()) || 'tag'] || Tag,
+      color: categoryColors[idx % categoryColors.length],
+    }));
+  }, [categories, products]);
+
+  const toggleWishlist = async (productId: string) => {
+    if (!user) {
+      window.alert('Please login to add products to wishlist.');
+      return;
+    }
+    const isWishlisted = wishlistIds.includes(productId);
+    if (isWishlisted) await removeFromWishlist(user.uid, productId);
+    else await addToWishlist(user, productId);
+  };
 
   return (
     <>
       <Header cartCount={cartCount} onCartOpen={() => setCartOpen(true)} />
       <main>
-        {/* Hero */}
         <section className="relative min-h-[90vh] flex items-center overflow-hidden bg-gradient-to-br from-cream-100 via-cream-50 to-blush-400/20">
-          {/* Decorative blobs */}
           <div className="absolute top-20 right-10 w-72 h-72 bg-blush-400/20 rounded-full blur-3xl" />
           <div className="absolute bottom-20 left-10 w-64 h-64 bg-sage-400/20 rounded-full blur-3xl" />
           <div className="absolute top-40 left-1/3 w-48 h-48 bg-sky-400/15 rounded-full blur-2xl" />
@@ -66,20 +120,18 @@ export default function HomePage() {
                 Little <span className="text-blush-500 italic">Ones</span>,<br />Big<br />Adventures
               </h1>
               <p className="text-lg text-cocoa-700/70 font-body leading-relaxed mb-8 max-w-md">
-                Discover thoughtfully chosen baby products that blend safety, comfort, and joy — crafted for every precious milestone.
+                Discover thoughtfully chosen baby products that blend safety, comfort, and joy - crafted for every precious milestone.
               </p>
               <div className="flex flex-wrap gap-4">
-                <Link href="/products"
-                  className="inline-flex items-center gap-2 bg-blush-500 hover:bg-blush-600 text-white px-8 py-4 rounded-full font-medium text-base transition-all hover:shadow-lg hover:shadow-blush-200 font-body">
+                <Link href="/products" className="inline-flex items-center gap-2 bg-blush-500 hover:bg-blush-600 text-white px-8 py-4 rounded-full font-medium text-base transition-all hover:shadow-lg hover:shadow-blush-200 font-body">
                   Shop Now <ArrowRight size={18} />
                 </Link>
-                <Link href="/about"
-                  className="inline-flex items-center gap-2 border-2 border-cocoa-800/20 text-cocoa-800 hover:border-blush-400 hover:text-blush-600 px-8 py-4 rounded-full font-medium text-base transition-colors font-body">
+                <Link href="/about" className="inline-flex items-center gap-2 border-2 border-cocoa-800/20 text-cocoa-800 hover:border-blush-400 hover:text-blush-600 px-8 py-4 rounded-full font-medium text-base transition-colors font-body">
                   Our Story
                 </Link>
               </div>
               <div className="flex items-center gap-6 mt-10">
-                {[['10k+', 'Happy Parents'], ['500+', 'Products'], ['4.9★', 'Average Rating']].map(([val, label]) => (
+                {[['10k+', 'Happy Parents'], ['500+', 'Products'], ['4.9?', 'Average Rating']].map(([val, label]) => (
                   <div key={label}>
                     <div className="font-display text-2xl text-cocoa-800">{val}</div>
                     <div className="text-xs text-cocoa-700/60 font-body">{label}</div>
@@ -88,16 +140,10 @@ export default function HomePage() {
               </div>
             </div>
 
-            {/* Hero image collage */}
             <div className="relative hidden lg:block animate-fade-up delay-200">
               <div className="relative w-full aspect-square max-w-lg mx-auto">
                 <div className="absolute inset-0 bg-blush-200/40 rounded-[40px] rotate-6" />
-                <img
-                  src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?w=600&q=80"
-                  alt="Happy baby"
-                  className="relative rounded-[32px] w-full h-full object-cover shadow-2xl"
-                />
-                {/* Floating cards */}
+                <img src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?w=600&q=80" alt="Happy baby" className="relative rounded-[32px] w-full h-full object-cover shadow-2xl" />
                 <div className="absolute -bottom-6 -left-8 bg-white rounded-2xl shadow-xl p-4 flex items-center gap-3">
                   <div className="w-12 h-12 bg-sage-100 rounded-xl flex items-center justify-center">
                     <Leaf size={22} className="text-sage-600" />
@@ -109,7 +155,7 @@ export default function HomePage() {
                 </div>
                 <div className="absolute -top-4 -right-6 bg-white rounded-2xl shadow-xl p-3">
                   <div className="flex gap-0.5 mb-1">
-                    {[1, 2, 3, 4, 5].map(s => <Star key={s} size={12} className="fill-amber-400 text-amber-400" />)}
+                    {[1, 2, 3, 4, 5].map((s) => <Star key={s} size={12} className="fill-amber-400 text-amber-400" />)}
                   </div>
                   <div className="text-xs font-body text-cocoa-700">4.9/5 Rating</div>
                   <div className="text-[10px] text-cocoa-700/50 font-body">12,000+ reviews</div>
@@ -119,7 +165,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Categories */}
         <section className="py-16 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between mb-10">
@@ -132,49 +177,20 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-7 gap-3">
-              {[
-                { name: 'Clothing', icon: Shirt, color: 'bg-blush-400' },
-                { name: 'Toys', icon: Puzzle, color: 'bg-sky-100' },
-                { name: 'Nursery', icon: Bed, color: 'bg-cream-200' },
-                { name: 'Gear', icon: Backpack, color: 'bg-blush-400' },
-                { name: 'Bedding', icon: Moon, color: 'bg-purple-100' },
-                { name: 'Bath', icon: Bath, color: 'bg-blue-100' },
-                { name: 'Feeding', icon: Milk, color: 'bg-amber-100' },
-              ].map(cat => {
-                const Icon = cat.icon; // 👈 important
-
+              {dynamicCategories.map((cat) => {
+                const Icon = cat.icon;
                 return (
                   <Link
                     key={cat.name}
                     href={`/products?category=${cat.name}`}
-                    className={`${cat.color} relative rounded-2xl p-5 text-center 
-  transition-all duration-300 ease-out 
-  hover:shadow-xl hover:-translate-y-2 hover:scale-[1.03] 
-  cursor-pointer group overflow-hidden`}
+                    className={`${cat.color} relative rounded-2xl p-5 text-center transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-2 hover:scale-[1.03] cursor-pointer group overflow-hidden`}
                   >
-                    {/* Soft gradient overlay on hover */}
                     <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-
-                    {/* Icon */}
-                    <div className="relative z-10 w-14 h-14 mx-auto mb-3 rounded-xl 
-    flex items-center justify-center 
-    bg-white/70 backdrop-blur-sm 
-    shadow-sm group-hover:shadow-md transition-all">
-
-                      <Icon
-                        size={26}
-                        className="text-cocoa-800 group-hover:text-blush-500 transition-colors duration-300"
-                      />
+                    <div className="relative z-10 w-14 h-14 mx-auto mb-3 rounded-xl flex items-center justify-center bg-white/70 backdrop-blur-sm shadow-sm group-hover:shadow-md transition-all">
+                      <Icon size={26} className="text-cocoa-800 group-hover:text-blush-500 transition-colors duration-300" />
                     </div>
-
-                    {/* Category name */}
-                    <div className="relative z-10 text-sm font-semibold text-cocoa-800 font-body tracking-tight">
-                      {cat.name}
-                    </div>
-
-                    {/* Subtle underline animation */}
-                    <div className="h-[2px] w-0 bg-black mx-auto mt-2 
-                      group-hover:w-6 transition-all duration-300 rounded-full" />
+                    <div className="relative z-10 text-sm font-semibold text-cocoa-800 font-body tracking-tight">{cat.name}</div>
+                    <div className="h-[2px] w-0 bg-black mx-auto mt-2 group-hover:w-6 transition-all duration-300 rounded-full" />
                   </Link>
                 );
               })}
@@ -182,7 +198,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* Featured Products */}
         <section className="py-16 bg-cream-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between mb-10">
@@ -195,18 +210,17 @@ export default function HomePage() {
               </Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {products.slice(0, 4).map(product => (
-                <ProductCard key={product.id} product={product} onAddToCart={addToCart} />
+              {products.slice(0, 4).map((product) => (
+                <ProductCard key={product.id} product={product} onAddToCart={addToCart} isWishlisted={wishlistIds.includes(product.id)} onToggleWishlist={toggleWishlist} />
               ))}
             </div>
           </div>
         </section>
 
-        {/* Features */}
         <section className="py-16 bg-cocoa-800">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
-              {FEATURES.map(f => (
+              {FEATURES.map((f) => (
                 <div key={f.title} className="text-center">
                   <div className="w-14 h-14 bg-blush-500/20 rounded-2xl flex items-center justify-center mx-auto mb-4">
                     <f.icon size={26} className="text-blush-400" />
@@ -219,7 +233,6 @@ export default function HomePage() {
           </div>
         </section>
 
-        {/* New Arrivals */}
         <section className="py-16 bg-white">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between mb-10">
@@ -229,14 +242,13 @@ export default function HomePage() {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {products.slice(4, 8).map(product => (
-                <ProductCard key={product.id} product={product} onAddToCart={addToCart} />
+              {products.slice(4, 8).map((product) => (
+                <ProductCard key={product.id} product={product} onAddToCart={addToCart} isWishlisted={wishlistIds.includes(product.id)} onToggleWishlist={toggleWishlist} />
               ))}
             </div>
           </div>
         </section>
 
-        {/* Banner CTA */}
         <section className="py-20 bg-gradient-to-r from-blush-400/30 via-cream-100 to-sage-400/20">
           <div className="max-w-4xl mx-auto px-4 text-center">
             <Baby size={48} className="text-blush-500 mx-auto mb-6 animate-bounce-soft" />
@@ -246,19 +258,17 @@ export default function HomePage() {
             <p className="text-lg text-cocoa-700/70 font-body mb-8 max-w-2xl mx-auto">
               We hand-select every item with love, ensuring it meets our strict standards for safety, sustainability, and pure delight.
             </p>
-            <Link href="/about"
-              className="inline-flex items-center gap-2 bg-cocoa-800 text-cream-100 hover:bg-cocoa-900 px-8 py-4 rounded-full font-medium text-base transition-colors font-body">
+            <Link href="/about" className="inline-flex items-center gap-2 bg-cocoa-800 text-cream-100 hover:bg-cocoa-900 px-8 py-4 rounded-full font-medium text-base transition-colors font-body">
               Learn Our Story <ArrowRight size={18} />
             </Link>
           </div>
         </section>
 
-        {/* Testimonials */}
         <section className="py-16 bg-cream-50">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="font-display text-3xl lg:text-4xl text-cocoa-800 text-center mb-12">What Parents Say</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {TESTIMONIALS.map(t => (
+              {TESTIMONIALS.map((t) => (
                 <div key={t.name} className="bg-white rounded-2xl p-6 shadow-sm">
                   <div className="flex gap-0.5 mb-4">
                     {Array.from({ length: t.rating }, (_, i) => (
@@ -286,10 +296,10 @@ export default function HomePage() {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         items={cartItems}
-        onRemove={(id) => setCartItems(prev => prev.filter(i => i.id !== id))}
+        onRemove={(id) => setCartItems((prev) => prev.filter((i) => i.id !== id))}
         onUpdateQty={(id, qty) => {
-          if (qty < 1) setCartItems(prev => prev.filter(i => i.id !== id));
-          else setCartItems(prev => prev.map(i => i.id === id ? { ...i, quantity: qty } : i));
+          if (qty < 1) setCartItems((prev) => prev.filter((i) => i.id !== id));
+          else setCartItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: qty } : i)));
         }}
       />
     </>

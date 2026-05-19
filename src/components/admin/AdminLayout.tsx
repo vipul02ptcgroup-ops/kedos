@@ -4,14 +4,16 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Settings, Star,
-  Menu, X, Bell, ChevronDown, TrendingUp, LogOut, BarChart2
+  Menu, X, Bell, ChevronDown, TrendingUp, LogOut, BarChart2, Tags, Heart
 } from 'lucide-react';
 import { getUserRole, logoutUser, subscribeAuth } from '@/lib/auth';
 
 const NAV = [
   { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
   { label: 'Products', href: '/admin/products', icon: Package },
+  { label: 'Categories', href: '/admin/categories', icon: Tags },
   { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+  { label: 'Wishlist', href: '/admin/wishlist', icon: Heart },
   { label: 'Customers', href: '/admin/customers', icon: Users },
   { label: 'Analytics', href: '/admin/analytics', icon: BarChart2 },
   { label: 'Settings', href: '/admin/settings', icon: Settings },

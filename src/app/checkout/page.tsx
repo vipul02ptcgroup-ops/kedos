@@ -1,12 +1,14 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { ChevronRight, Shield, Truck, Tag, CreditCard, Smartphone } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { ChevronRight, Shield, Truck, Tag, CreditCard, Smartphone, IndianRupee  } from 'lucide-react';
 import { Product } from '@/lib/data';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { subscribeProducts } from '@/lib/products';
 import { getUserProfile, subscribeAuth } from '@/lib/auth';
+import { createOrder } from '@/lib/orders';
 
 export default function CheckoutPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -14,6 +16,13 @@ export default function CheckoutPage() {
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [coupon, setCoupon] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
+  const [isPinLoading, setIsPinLoading] = useState(false);
+  const [pinError, setPinError] = useState('');
+  const [isPinValid, setIsPinValid] = useState(false);
+  const [isPlacingOrder, setIsPlacingOrder] = useState(false);
+  const [orderError, setOrderError] = useState('');
+  const [userId, setUserId] = useState('');
+  const router = useRouter();
   const [deliveryForm, setDeliveryForm] = useState({
     firstName: '',
     lastName: '',
@@ -33,6 +42,7 @@ export default function CheckoutPage() {
   useEffect(() => {
     const unsub = subscribeAuth(async (user) => {
       if (!user) return;
+      setUserId(user.uid || '');
 
       const profile = await getUserProfile(user.uid).catch(() => null);
       const fullName = (profile?.name || user.displayName || '').trim();
@@ -49,6 +59,73 @@ export default function CheckoutPage() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const pin = deliveryForm.pin.trim();
+
+    if (!pin) {
+      setPinError('');
+      setIsPinValid(false);
+      setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+      return;
+    }
+
+    if (!/^\d{6}$/.test(pin)) {
+      setPinError('PIN must be 6 digits.');
+      setIsPinValid(false);
+      setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+      return;
+    }
+
+    let cancelled = false;
+    const timeout = setTimeout(async () => {
+      try {
+        setIsPinLoading(true);
+        setPinError('');
+
+        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+        const data = await res.json();
+        const postOffice = data?.[0]?.PostOffice?.[0];
+
+        if (cancelled) return;
+
+        if (!postOffice || data?.[0]?.Status !== 'Success') {
+          setIsPinValid(false);
+          setPinError('Invalid PIN code. Please enter a valid PIN.');
+          setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+          return;
+        }
+
+        const city = (postOffice.District || '').trim();
+        const state = (postOffice.State || '').trim();
+        if (!city || !state) {
+          setIsPinValid(false);
+          setPinError('Could not fetch city/state for this PIN. Please use another PIN.');
+          setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+          return;
+        }
+
+        setDeliveryForm((prev) => ({
+          ...prev,
+          city,
+          state,
+        }));
+        setIsPinValid(true);
+      } catch {
+        if (cancelled) return;
+        setIsPinValid(false);
+        setPinError('Unable to verify PIN right now. Please try again.');
+        setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+      } finally {
+        if (!cancelled) setIsPinLoading(false);
+      }
+    }, 400);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timeout);
+    };
+  }, [deliveryForm.pin]);
+
   const sampleItems = useMemo(() => {
     return products.slice(0, 2).map((item) => ({ ...item, quantity: 1 }));
   }, [products]);
@@ -57,8 +134,83 @@ export default function CheckoutPage() {
   const shipping = subtotal > 999 ? 0 : 99;
   const discount = couponApplied ? subtotal * 0.1 : 0;
   const total = subtotal + shipping - discount;
+  const isDeliveryComplete = Boolean(
+    deliveryForm.firstName.trim() &&
+      deliveryForm.lastName.trim() &&
+      deliveryForm.email.trim() &&
+      deliveryForm.phone.trim() &&
+      deliveryForm.address.trim() &&
+      isPinValid &&
+      deliveryForm.city.trim() &&
+      deliveryForm.state.trim()
+  );
 
   const STEPS = ['Delivery', 'Payment', 'Review'];
+
+  const handlePlaceOrder = async () => {
+    if (!isDeliveryComplete || isPinLoading || isPlacingOrder || sampleItems.length === 0) return;
+
+    setIsPlacingOrder(true);
+    setOrderError('');
+    try {
+      const orderItems = sampleItems.map((item) => ({
+        productId: item.id,
+        name: item.name,
+        image: item.image,
+        category: item.category,
+        price: item.price,
+        quantity: item.quantity,
+      }));
+
+      const { id: orderId, orderCode } = await createOrder({
+        userId: userId || undefined,
+        customerName: `${deliveryForm.firstName} ${deliveryForm.lastName}`.trim(),
+        email: deliveryForm.email.trim(),
+        phone: deliveryForm.phone.trim(),
+        paymentMethod,
+        items: orderItems,
+        subtotal,
+        shipping,
+        discount,
+        total,
+        delivery: {
+          firstName: deliveryForm.firstName.trim(),
+          lastName: deliveryForm.lastName.trim(),
+          email: deliveryForm.email.trim(),
+          phone: deliveryForm.phone.trim(),
+          address: deliveryForm.address.trim(),
+          city: deliveryForm.city.trim(),
+          state: deliveryForm.state.trim(),
+          pin: deliveryForm.pin.trim(),
+        },
+      });
+
+      if (typeof window !== 'undefined') {
+        sessionStorage.setItem(
+          'lastOrderSnapshot',
+          JSON.stringify({
+            id: orderId,
+            orderCode,
+            customerName: `${deliveryForm.firstName} ${deliveryForm.lastName}`.trim(),
+            email: deliveryForm.email.trim(),
+            paymentMethod,
+            items: orderItems,
+            subtotal,
+            shipping,
+            discount,
+            total,
+            createdAtIso: new Date().toISOString(),
+          })
+        );
+      }
+
+      router.push(`/order-success?orderId=${encodeURIComponent(orderId)}`);
+    } catch {
+      setOrderError('Unable to place order right now. Please try again.');
+    } finally {
+      setIsPlacingOrder(false);
+    }
+  };
 
   return (
     <>
@@ -74,7 +226,7 @@ export default function CheckoutPage() {
                   <div className={`flex items-center gap-2 cursor-pointer`} onClick={() => i + 1 <= step && setStep(i + 1)}>
                     <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium font-body transition-colors
                       ${i + 1 === step ? 'bg-blush-500 text-white' : i + 1 < step ? 'bg-sage-500 text-white' : 'bg-cream-200 text-cocoa-700/50'}`}>
-                      {i + 1 < step ? '✓' : i + 1}
+                      {i + 1 < step ? '1' : i + 1}
                     </div>
                     <span className={`text-sm font-body hidden sm:inline ${i + 1 === step ? 'text-blush-600 font-medium' : 'text-cocoa-700/50'}`}>{s}</span>
                   </div>
@@ -132,23 +284,49 @@ export default function CheckoutPage() {
                       />
                     </div>
                     <div className="grid sm:grid-cols-3 gap-4">
-                      {[['city', 'City'], ['state', 'State'], ['pin', 'PIN']].map(([key, lbl]) => (
-                        <div key={lbl}>
-                          <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">{lbl} *</label>
-                          <input
-                            value={deliveryForm[key as 'city' | 'state' | 'pin']}
-                            onChange={(e) => setDeliveryForm((prev) => ({ ...prev, [key]: e.target.value }))}
-                            className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 text-cocoa-800"
-                          />
-                        </div>
-                      ))}
+                      <div>
+                        <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">PIN *</label>
+                        <input
+                          value={deliveryForm.pin}
+                          maxLength={6}
+                          onChange={(e) => {
+                            const cleaned = e.target.value.replace(/\D/g, '');
+                            setDeliveryForm((prev) => ({ ...prev, pin: cleaned }));
+                          }}
+                          className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 text-cocoa-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">City *</label>
+                        <input
+                          value={deliveryForm.city}
+                          readOnly
+                          placeholder="Auto-filled from PIN"
+                          className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-100 text-sm font-body focus:outline-none text-cocoa-800"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">State *</label>
+                        <input
+                          value={deliveryForm.state}
+                          readOnly
+                          placeholder="Auto-filled from PIN"
+                          className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-100 text-sm font-body focus:outline-none text-cocoa-800"
+                        />
+                      </div>
+                      
                     </div>
+                    {isPinLoading && <p className="text-xs font-body text-cocoa-700/60">Verifying PIN...</p>}
+                    {pinError && <p className="text-xs font-body text-red-600">{pinError}</p>}
+                    {!pinError && isPinValid && deliveryForm.pin && (
+                      <p className="text-xs font-body text-sage-600">PIN verified successfully.</p>
+                    )}
                   </div>
                   <div className="mt-4 p-4 bg-cream-50 rounded-xl space-y-3">
                     <p className="text-sm font-medium text-cocoa-800 font-body">Delivery Method</p>
                     {[
-                      { id: 'std', label: 'Standard Delivery', sub: '3–5 business days', price: subtotal > 999 ? 'FREE' : '₹99' },
-                      { id: 'exp', label: 'Express Delivery', sub: '1–2 business days', price: '₹199' },
+                      { id: 'std', label: 'Standard Delivery', sub: '3-5 business days', price: subtotal > 999 ? 'FREE' : '₹99' },
+                      { id: 'exp', label: 'Express Delivery', sub: '1-2 business days', price: '₹199' },
                     ].map(opt => (
                       <label key={opt.id} className="flex items-center gap-3 cursor-pointer p-2 rounded-lg hover:bg-cream-100 transition-colors">
                         <input type="radio" name="delivery" defaultChecked={opt.id === 'std'} className="accent-blush-500" />
@@ -160,7 +338,14 @@ export default function CheckoutPage() {
                       </label>
                     ))}
                   </div>
-                  <button onClick={() => setStep(2)} className="mt-5 w-full py-3.5 bg-blush-500 hover:bg-blush-600 text-white rounded-full font-medium font-body transition-colors flex items-center justify-center gap-2">
+                  <button
+                    onClick={() => {
+                      if (!isDeliveryComplete || isPinLoading) return;
+                      setStep(2);
+                    }}
+                    disabled={!isDeliveryComplete || isPinLoading}
+                    className="mt-5 w-full py-3.5 bg-blush-500 hover:bg-blush-600 disabled:bg-blush-300 disabled:cursor-not-allowed text-white rounded-full font-medium font-body transition-colors flex items-center justify-center gap-2"
+                  >
                     Continue to Payment <ChevronRight size={16} />
                   </button>
                 </div>
@@ -174,7 +359,7 @@ export default function CheckoutPage() {
                     {[
                       { id: 'card', label: 'Credit / Debit Card', icon: <CreditCard size={18} /> },
                       { id: 'upi', label: 'UPI', icon: <Smartphone size={18} /> },
-                      { id: 'cod', label: 'Cash on Delivery', icon: '💵' },
+                      { id: 'cod', label: 'Cash on Delivery', icon: <IndianRupee size={18} /> },
                     ].map(m => (
                       <label key={m.id} onClick={() => setPaymentMethod(m.id)}
                         className={`flex items-center gap-3 p-4 rounded-xl border-2 cursor-pointer transition-colors ${paymentMethod === m.id ? 'border-blush-400 bg-blush-50' : 'border-cream-200 hover:border-cream-300'}`}>
@@ -212,12 +397,15 @@ export default function CheckoutPage() {
                     <button onClick={() => setStep(1)} className="px-6 py-3.5 border-2 border-cream-200 rounded-full font-medium font-body text-cocoa-700 hover:bg-cream-100 transition-colors">
                       Back
                     </button>
-                    <Link href="/order-success" className="flex-1">
-                      <button disabled onClick={() => setStep(3)} className="w-full py-3.5 bg-blush-500 hover:bg-blush-600 text-white rounded-full font-medium font-body transition-colors flex items-center justify-center gap-2">
-                        Place Order · ₹{total.toFixed(0)} <ChevronRight size={16} />
-                      </button>
-                    </Link>
+                    <button
+                      onClick={handlePlaceOrder}
+                      disabled={isPlacingOrder || isPinLoading || !isDeliveryComplete}
+                      className="flex-1 w-full py-3.5 bg-blush-500 hover:bg-blush-600 disabled:bg-blush-300 disabled:cursor-not-allowed text-white rounded-full font-medium font-body transition-colors flex items-center justify-center gap-2"
+                    >
+                      {isPlacingOrder ? 'Placing Order...' : `Place Order · ₹${total.toFixed(0)}`} <ChevronRight size={16} />
+                    </button>
                   </div>
+                  {orderError && <p className="mt-3 text-sm text-red-600 font-body">{orderError}</p>}
                   <div className="flex items-center justify-center gap-2 mt-4 text-xs text-cocoa-700/50 font-body">
                     <Shield size={13} /> Secured by 256-bit SSL encryption
                   </div>
@@ -262,7 +450,7 @@ export default function CheckoutPage() {
                 </div>
                 {couponApplied && (
                   <div className="text-xs text-sage-600 font-body bg-sage-50 px-3 py-2 rounded-lg mb-4">
-                    ✓ Coupon applied — 10% off!
+                    ✓ Coupon applied - 10% off!
                   </div>
                 )}
 

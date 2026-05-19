@@ -1,0 +1,20 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Product image uploads used by admin panel.
+    // Note: current admin auth is client-side only (no Firebase Auth),
+    // so we allow writes here to keep uploads functional.
+    // Move to Firebase Auth-based checks for stricter production security.
+    match /products/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.resource != null
+        && request.resource.size < 10 * 1024 * 1024
+        && request.resource.contentType.matches('image/.*');
+    }
+
+    // Deny everything else by default.
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

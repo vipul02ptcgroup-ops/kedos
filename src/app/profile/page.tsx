@@ -2,11 +2,15 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ShoppingBag, Heart, MapPin, LogOut, ChevronRight, Package, Star, Edit3 } from 'lucide-react';
-import { ORDERS } from '@/lib/data';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { subscribeAuth } from '@/lib/auth';
+import { getUserProfile, subscribeAuth } from '@/lib/auth';
 import { User as FirebaseUser } from 'firebase/auth';
+import { subscribeOrdersForUserIdentity, type FirestoreOrder } from '@/lib/orders';
+import { subscribeUserWishlistProductIds, addToWishlist, removeFromWishlist } from '@/lib/wishlist';
+import { subscribeProducts } from '@/lib/products';
+import { Product } from '@/lib/data';
+import ProductCard from '@/components/product/ProductCard';
 
 const TABS = ['Overview', 'Orders', 'Wishlist', 'Addresses', 'Settings'];
 const STATUS_COLORS: Record<string, string> = {
@@ -21,6 +25,18 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('Overview');
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
+  const [orders, setOrders] = useState<FirestoreOrder[]>([]);
+  const [profileName, setProfileName] = useState('');
+  const [profilePhone, setProfilePhone] = useState('');
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+  const [products, setProducts] = useState<Product[]>([]);
+
+  const fullName = (profileName || user?.displayName || 'Customer').trim();
+  const userEmail = user?.email || '';
+  const userPhone = profilePhone || user?.phoneNumber || '';
+  const totalOrders = orders.length;
+  const inTransitOrders = orders.filter((o) => o.status === 'processing' || o.status === 'shipped').length;
+  const wishlistProducts = products.filter((p) => wishlistIds.includes(p.id));
 
   useEffect(() => {
     const unsub = subscribeAuth((u) => {
@@ -29,6 +45,44 @@ export default function ProfilePage() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    const unsub = subscribeProducts(setProducts);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      setOrders([]);
+      setProfileName('');
+      setProfilePhone('');
+      return;
+    }
+
+    const fetchProfile = async () => {
+      const profile = await getUserProfile(user.uid).catch(() => null);
+      if (profile?.name) setProfileName(String(profile.name));
+      if (profile?.phone) setProfilePhone(String(profile.phone));
+    };
+    fetchProfile();
+
+    const unsubOrders = subscribeOrdersForUserIdentity(
+      { userId: user.uid, email: user.email },
+      setOrders
+    );
+    const unsubWishlist = subscribeUserWishlistProductIds(user.uid, setWishlistIds);
+    return () => {
+      unsubOrders();
+      unsubWishlist();
+    };
+  }, [user]);
+
+  const toggleWishlist = async (productId: string) => {
+    if (!user) return;
+    const isWishlisted = wishlistIds.includes(productId);
+    if (isWishlisted) await removeFromWishlist(user.uid, productId);
+    else await addToWishlist(user, productId);
+  };
 
   if (checkingAuth) {
     return (
@@ -69,18 +123,19 @@ export default function ProfilePage() {
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center sm:items-end gap-4">
             <div className="relative">
               <div className="w-24 h-24 rounded-full bg-blush-300 flex items-center justify-center ring-4 ring-cocoa-700">
-                <span className="font-display text-3xl text-white">{(user.displayName || user.email || 'U').charAt(0).toUpperCase()}</span>
+                <span className="font-display text-3xl text-white">{(fullName || userEmail || 'U').charAt(0).toUpperCase()}</span>
               </div>
               <button className="absolute bottom-0 right-0 w-7 h-7 bg-blush-500 rounded-full flex items-center justify-center shadow-md">
                 <Edit3 size={12} className="text-white" />
               </button>
             </div>
             <div className="text-center sm:text-left sm:pb-2">
-              <h1 className="font-display text-2xl text-cream-100">{user.displayName || 'Customer'}</h1>
-              <p className="text-cream-200/60 font-body text-sm">{user.email}</p>
+              <h1 className="font-display text-2xl text-cream-100">{fullName}</h1>
+              <p className="text-cream-200/60 font-body text-sm">{userEmail || '-'}</p>
+              {userPhone && <p className="text-cream-200/50 font-body text-xs mt-0.5">{userPhone}</p>}
             </div>
             <div className="sm:ml-auto flex gap-4 text-center sm:pb-2">
-              {[['0', 'Orders'], ['0', 'Wishlist'], ['0', 'Addresses']].map(([val, lbl]) => (
+              {[[String(totalOrders), 'Orders'], [String(wishlistProducts.length), 'Wishlist'], ['0', 'Addresses']].map(([val, lbl]) => (
                 <div key={lbl}>
                   <div className="font-display text-xl text-cream-100">{val}</div>
                   <div className="text-xs text-cream-200/50 font-body">{lbl}</div>
@@ -105,9 +160,9 @@ export default function ProfilePage() {
           {activeTab === 'Overview' && (
             <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-5 mb-8">
               {[
-                { icon: ShoppingBag, label: 'Total Orders', val: '0', color: 'bg-blush-100 text-blush-600' },
-                { icon: Package, label: 'In Transit', val: '0', color: 'bg-sky-100 text-sky-600' },
-                { icon: Heart, label: 'Wishlist', val: '0', color: 'bg-pink-100 text-pink-600' },
+                { icon: ShoppingBag, label: 'Total Orders', val: String(totalOrders), color: 'bg-blush-100 text-blush-600' },
+                { icon: Package, label: 'In Transit', val: String(inTransitOrders), color: 'bg-sky-100 text-sky-600' },
+                { icon: Heart, label: 'Wishlist', val: String(wishlistProducts.length), color: 'bg-pink-100 text-pink-600' },
                 { icon: Star, label: 'Reviews Given', val: '0', color: 'bg-amber-100 text-amber-600' },
               ].map(s => (
                 <div key={s.label} className="bg-white rounded-2xl p-6 shadow-sm flex items-center gap-4">
@@ -130,19 +185,50 @@ export default function ProfilePage() {
                 <table className="w-full">
                   <thead className="bg-cream-50"><tr>{['Order', 'Date', 'Items', 'Total', 'Status', ''].map(h => (<th key={h} className="px-6 py-3 text-left text-xs font-medium text-cocoa-700/60 font-body uppercase tracking-wide">{h}</th>))}</tr></thead>
                   <tbody className="divide-y divide-cream-100">
-                    {ORDERS.slice(0, activeTab === 'Overview' ? 3 : undefined).map(order => (
+                    {orders.slice(0, activeTab === 'Overview' ? 3 : undefined).map(order => (
                       <tr key={order.id} className="hover:bg-cream-50 transition-colors">
-                        <td className="px-6 py-4 text-sm font-medium text-cocoa-800 font-body">{order.id}</td>
-                        <td className="px-6 py-4 text-sm text-cocoa-700/60 font-body">{order.date}</td>
-                        <td className="px-6 py-4 text-sm text-cocoa-700/60 font-body">{order.items} items</td>
-                        <td className="px-6 py-4 text-sm font-display text-cocoa-800">Rs {order.total.toFixed(0)}</td>
-                        <td className="px-6 py-4"><span className={`px-2.5 py-1 rounded-full text-xs font-medium font-body capitalize ${STATUS_COLORS[order.status]}`}>{order.status}</span></td>
+                        <td className="px-6 py-4 text-sm font-medium text-cocoa-800 font-body">#{order.orderCode || order.id}</td>
+                        <td className="px-6 py-4 text-sm text-cocoa-700/60 font-body">
+                          {order.createdAt?.toDate ? order.createdAt.toDate().toLocaleDateString('en-IN') : 'N/A'}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-cocoa-700/60 font-body">{order.itemsCount || order.items?.length || 0} items</td>
+                        <td className="px-6 py-4 text-sm font-display text-cocoa-800">Rs {Number(order.total || 0).toFixed(0)}</td>
+                        <td className="px-6 py-4"><span className={`px-2.5 py-1 rounded-full text-xs font-medium font-body capitalize ${STATUS_COLORS[order.status] || STATUS_COLORS.pending}`}>{order.status}</span></td>
                         <td className="px-6 py-4 text-right"><button className="text-xs text-blush-500 hover:text-blush-600 font-body">Details</button></td>
                       </tr>
                     ))}
+                    {orders.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-cocoa-700/60 font-body">
+                          No orders yet.
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'Wishlist' && (
+            <div className="mb-6">
+              {wishlistProducts.length === 0 ? (
+                <div className="bg-white rounded-2xl p-8 shadow-sm text-center">
+                  <p className="text-sm text-cocoa-700/70 font-body">No wishlist items yet.</p>
+                  <Link href="/products" className="inline-flex mt-4 px-5 py-2.5 rounded-full bg-blush-500 text-white text-sm font-body font-medium hover:bg-blush-600">Browse Products</Link>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+                  {wishlistProducts.map((product) => (
+                    <ProductCard
+                      key={product.id}
+                      product={product}
+                      isWishlisted={wishlistIds.includes(product.id)}
+                      onToggleWishlist={toggleWishlist}
+                    />
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
@@ -161,11 +247,11 @@ export default function ProfilePage() {
               <div className="space-y-5 max-w-lg">
                 <div>
                   <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">Name</label>
-                  <input defaultValue={user.displayName || ''} className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body" />
+                  <input defaultValue={fullName || ''} className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body" />
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">Email</label>
-                  <input defaultValue={user.email || ''} className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body" />
+                  <input defaultValue={userEmail || ''} className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body" />
                 </div>
                 <button className="px-8 py-3 bg-blush-500 text-white rounded-full font-medium font-body text-sm hover:bg-blush-600 transition-colors">Save Changes</button>
               </div>

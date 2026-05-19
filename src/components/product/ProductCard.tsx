@@ -1,20 +1,24 @@
 'use client';
 import Link from 'next/link';
-import Image from 'next/image';
-import { ShoppingBag, Heart, Star, Eye } from 'lucide-react';
+import { ShoppingBag, Heart, Star } from 'lucide-react';
 import { Product } from '@/lib/data';
 
 interface ProductCardProps {
   product: Product;
   onAddToCart?: (id: string) => void;
+  isWishlisted?: boolean;
+  onToggleWishlist?: (id: string) => void;
 }
 
-export default function ProductCard({ product, onAddToCart }: ProductCardProps) {
+export default function ProductCard({ product, onAddToCart, isWishlisted = false, onToggleWishlist }: ProductCardProps) {
   const discount = product.originalPrice
     ? Math.round((1 - product.price / product.originalPrice) * 100)
     : null;
 
   return (
+    <Link href={`/products/${product.id}`}>
+            
+          
     <div className="group relative bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
       {/* Image */}
       <div className="relative aspect-square overflow-hidden bg-cream-100">
@@ -43,13 +47,18 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
         </div>
         {/* Hover actions */}
         <div className="absolute top-3 right-3 flex flex-col gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button className="w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-blush-50 transition-colors">
-            <Heart size={16} className="text-blush-500" />
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onToggleWishlist?.(product.id);
+            }}
+            className="w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-blush-50 transition-colors"
+          >
+            <Heart size={16} className={isWishlisted ? 'fill-blush-500 text-blush-500' : 'text-blush-500'} />
           </button>
-          <Link href={`/products/${product.id}`}
-            className="w-9 h-9 bg-white rounded-full shadow-md flex items-center justify-center hover:bg-blush-50 transition-colors">
-            <Eye size={16} className="text-cocoa-700" />
-          </Link>
+          
         </div>
       </div>
 
@@ -87,7 +96,12 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
             )}
           </div>
           <button
-            onClick={() => product.inStock && onAddToCart?.(product.id)}
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (product.inStock) onAddToCart?.(product.id);
+            }}
             disabled={!product.inStock}
             className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-xs font-medium transition-colors font-body
               ${product.inStock
@@ -100,5 +114,6 @@ export default function ProductCard({ product, onAddToCart }: ProductCardProps) 
         </div>
       </div>
     </div>
+    </Link>
   );
 }

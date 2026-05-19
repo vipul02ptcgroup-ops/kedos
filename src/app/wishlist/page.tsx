@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Heart, ShoppingBag, Trash2 } from 'lucide-react';
+import { Heart, ShoppingBag } from 'lucide-react';
 import { Product, CartItem } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
@@ -8,20 +8,31 @@ import Footer from '@/components/layout/Footer';
 import CartDrawer from '@/components/cart/CartDrawer';
 import Link from 'next/link';
 import { subscribeProducts } from '@/lib/products';
+import { subscribeAuth } from '@/lib/auth';
+import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
+import { User as FirebaseUser } from 'firebase/auth';
 
 export default function WishlistPage() {
   const [products, setProducts] = useState<Product[]>([]);
-  const [wishlist, setWishlist] = useState<Product[]>([]);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
   useEffect(() => {
-    const unsub = subscribeProducts((rows) => {
-      setProducts(rows);
-      setWishlist(rows.slice(0, 4));
-    });
+    const unsub = subscribeProducts(setProducts);
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    const unsub = subscribeAuth(setUser);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeUserWishlistProductIds(user?.uid, setWishlistIds);
+    return () => unsub();
+  }, [user?.uid]);
 
   const addToCart = (productId: string) => {
     const product = products.find(p => p.id === productId);
@@ -35,6 +46,17 @@ export default function WishlistPage() {
   };
 
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
+  const wishlist = products.filter((p) => wishlistIds.includes(p.id));
+
+  const toggleWishlist = async (productId: string) => {
+    if (!user) {
+      window.alert('Please login to add products to wishlist.');
+      return;
+    }
+    const isWishlisted = wishlistIds.includes(productId);
+    if (isWishlisted) await removeFromWishlist(user.uid, productId);
+    else await addToWishlist(user, productId);
+  };
 
   return (
     <>
@@ -60,7 +82,7 @@ export default function WishlistPage() {
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
-              {wishlist.map(p => <ProductCard key={p.id} product={p} onAddToCart={addToCart} />)}
+              {wishlist.map(p => <ProductCard key={p.id} product={p} onAddToCart={addToCart} isWishlisted={wishlistIds.includes(p.id)} onToggleWishlist={toggleWishlist} />)}
             </div>
           )}
         </div>

@@ -10,6 +10,7 @@ import { db } from '@/lib/firebase';
 
 type DashboardOrder = {
   id: string;
+  orderCode: string;
   customer: string;
   status: string;
   total: number;
@@ -46,6 +47,7 @@ function parseOrder(docId: string, data: any): DashboardOrder {
 
   return {
     id: docId,
+    orderCode: String(data?.orderCode || docId),
     customer,
     status,
     total,
@@ -276,7 +278,7 @@ export default function AdminDashboard() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm font-medium text-slate-800 font-body truncate">{order.customer}</div>
-                    <div className="text-xs text-slate-400 font-body">{order.id}</div>
+                    <div className="text-xs text-slate-400 font-body">#{order.orderCode}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm font-display text-slate-800">Rs {order.total.toFixed(0)}</div>

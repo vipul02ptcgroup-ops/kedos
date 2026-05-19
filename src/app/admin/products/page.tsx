@@ -1,16 +1,18 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Eye, ChevronDown, Star } from 'lucide-react';
-import { CATEGORIES, Product } from '@/lib/data';
+import { Plus, Search, Edit2, Trash2, Eye, ChevronDown, Star, Upload, X } from 'lucide-react';
+import { Product } from '@/lib/data';
 import AdminLayout from '@/components/admin/AdminLayout';
 import Link from 'next/link';
 import { removeProduct, saveProduct, subscribeProducts } from '@/lib/products';
+import { subscribeCategories } from '@/lib/categories';
 
 const emptyProduct: Omit<Product, 'id'> = {
   name: '',
   price: 0,
-  category: CATEGORIES[1] || 'General',
+  category: '',
   image: '',
+  images: [],
   rating: 0,
   reviews: 0,
   description: '',
@@ -21,12 +23,15 @@ const emptyProduct: Omit<Product, 'id'> = {
 
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [cat, setCat] = useState('All');
   const [showModal, setShowModal] = useState(false);
   const [editProduct, setEditProduct] = useState<Product | null>(null);
   const [form, setForm] = useState<Omit<Product, 'id'>>(emptyProduct);
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState('');
 
   useEffect(() => {
     const unsub = subscribeProducts((rows) => {
@@ -36,6 +41,19 @@ export default function AdminProductsPage() {
     return () => unsub();
   }, []);
 
+  useEffect(() => {
+    const unsub = subscribeCategories(setCategories);
+    return () => unsub();
+  }, []);
+
+  const categoriesForForm = useMemo(() => {
+    const set = new Set(categories);
+    for (const p of products) set.add(p.category);
+    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+  }, [categories, products]);
+
+  const filterCategories = useMemo(() => ['All', ...categoriesForForm], [categoriesForForm]);
+
   const filtered = useMemo(() => {
     return products
       .filter(p => cat === 'All' || p.category === cat)
@@ -44,19 +62,73 @@ export default function AdminProductsPage() {
 
   const openForAdd = () => {
     setEditProduct(null);
-    setForm(emptyProduct);
+    setForm({ ...emptyProduct, category: categoriesForForm[0] || 'General' });
     setShowModal(true);
   };
 
   const openForEdit = (product: Product) => {
     setEditProduct(product);
-    setForm({ ...product });
+    setForm({ ...product, images: product.images?.length ? product.images : product.image ? [product.image] : [] });
     setShowModal(true);
   };
 
   const onSave = async () => {
-    await saveProduct({ ...form, id: editProduct?.id });
+    const images = (form.images || []).filter(Boolean);
+    await saveProduct({ ...form, image: images[0] || form.image, images, id: editProduct?.id });
     setShowModal(false);
+  };
+
+  const onImageUpload = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    setUploadError('');
+    try {
+      const uploaded = await Promise.all(
+        Array.from(files).map(async (file) => {
+          const body = new FormData();
+          body.append('file', file);
+          const response = await fetch('/api/admin/upload-product-image', {
+            method: 'POST',
+            body,
+          });
+          const raw = await response.text();
+          let data: any = null;
+          try {
+            data = raw ? JSON.parse(raw) : null;
+          } catch {
+            data = null;
+          }
+          if (!response.ok || !data?.url) {
+            throw new Error(data?.error || `Image upload failed (HTTP ${response.status}).`);
+          }
+          return data.url as string;
+        })
+      );
+      setForm((prev) => {
+        const images = [...(prev.images || []), ...uploaded];
+        return { ...prev, image: images[0] || prev.image, images };
+      });
+    } catch (error: any) {
+      const code = error?.code ? ` (${error.code})` : '';
+      const message = error?.message || 'Image upload failed.';
+      setUploadError(`${message}${code}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const removeImage = (imageUrl: string) => {
+    setForm((prev) => {
+      const images = (prev.images || []).filter((img) => img !== imageUrl);
+      return { ...prev, images, image: images[0] || '' };
+    });
+  };
+
+  const setPrimaryImage = (imageUrl: string) => {
+    setForm((prev) => {
+      const images = [imageUrl, ...(prev.images || []).filter((img) => img !== imageUrl)];
+      return { ...prev, image: imageUrl, images };
+    });
   };
 
   const onDelete = async (id: string) => {
@@ -87,7 +159,7 @@ export default function AdminProductsPage() {
           <div className="relative">
             <select value={cat} onChange={e => setCat(e.target.value)}
               className="appearance-none pl-3 pr-8 py-2.5 rounded-xl border border-slate-200 text-sm font-body text-slate-700">
-              {CATEGORIES.map(c => <option key={c}>{c}</option>)}
+              {filterCategories.map(c => <option key={c}>{c}</option>)}
             </select>
             <ChevronDown size={13} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none" />
           </div>
@@ -148,11 +220,52 @@ export default function AdminProductsPage() {
                 <input type="number" value={form.originalPrice || ''} onChange={(e) => setForm({ ...form, originalPrice: e.target.value ? Number(e.target.value) : undefined })} placeholder="Original Price" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
               </div>
               <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-slate-200">
-                {CATEGORIES.filter(c => c !== 'All').map(c => <option key={c}>{c}</option>)}
+                {(categoriesForForm.length ? categoriesForForm : ['General']).map(c => <option key={c}>{c}</option>)}
               </select>
               <input value={form.ageRange || ''} onChange={(e) => setForm({ ...form, ageRange: e.target.value })} placeholder="Age Range" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
-              <input value={form.image} onChange={(e) => setForm({ ...form, image: e.target.value })} placeholder="Image URL" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
+              <div className="space-y-3">
+                <label className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600 cursor-pointer hover:border-blush-300 hover:bg-blush-50/40">
+                  <Upload size={18} className="text-slate-400" />
+                  <span>{uploading ? 'Uploading images...' : 'Upload multiple product images'}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    multiple
+                    disabled={uploading}
+                    onChange={(e) => onImageUpload(e.target.files)}
+                    className="hidden"
+                  />
+                </label>
+                {uploadError && <p className="text-sm text-red-500 font-body">{uploadError}</p>}
+                <input
+                  value={form.image}
+                  onChange={(e) => setForm({ ...form, image: e.target.value, images: e.target.value ? [e.target.value, ...((form.images || []).filter((img) => img !== e.target.value))] : form.images })}
+                  placeholder="Or paste main image URL"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                />
+                {!!form.images?.length && (
+                  <div className="grid grid-cols-4 gap-3">
+                    {form.images.map((img) => (
+                      <div key={img} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200">
+                        <button type="button" onClick={() => setPrimaryImage(img)} className="w-full h-full">
+                          <img src={img} alt="" className="w-full h-full object-cover" />
+                        </button>
+                        {img === form.image && (
+                          <span className="absolute left-1.5 bottom-1.5 rounded-md bg-blush-500 px-1.5 py-0.5 text-[10px] text-white">Main</span>
+                        )}
+                        <button
+                          type="button"
+                          onClick={() => removeImage(img)}
+                          className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-sm hover:text-red-500"
+                        >
+                          <X size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
               <label className="flex items-center gap-2"><input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />In Stock</label>
               <div className="flex justify-end gap-2">
                 <button onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-200 rounded-xl">Cancel</button>

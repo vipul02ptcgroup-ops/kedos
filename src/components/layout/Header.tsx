@@ -50,8 +50,9 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex items-center justify-between h-16 lg:h-20">
             {/* Logo */}
-            <Link href="/" className="flex items-center gap-2 group">
-              <img src='/Images/Logo.png' className='h-14 w-auto' />
+            <Link href="/" className="flex items-center gap-2 group" aria-label="Kedos home">
+              <img src="/Images/Logo.png" alt="Kedos" className="h-14 w-auto" />
+              <span className="sr-only">Kedos</span>
             </Link>
 
             {/* Desktop nav */}

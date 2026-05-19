@@ -1,16 +1,22 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { SlidersHorizontal, Grid3x3, List, ChevronDown, Search } from 'lucide-react';
-import { CATEGORIES, CartItem, Product } from '@/lib/data';
+import { CartItem, Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import CartDrawer from '@/components/cart/CartDrawer';
 import { subscribeProducts } from '@/lib/products';
+import { subscribeCategories } from '@/lib/categories';
+import { useSearchParams } from 'next/navigation';
+import { subscribeAuth } from '@/lib/auth';
+import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
+import { User as FirebaseUser } from 'firebase/auth';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('All');
+  const [categories, setCategories] = useState<string[]>([]);
   const [sortBy, setSortBy] = useState('featured');
   const [search, setSearch] = useState('');
   const [gridView, setGridView] = useState(true);
@@ -18,11 +24,42 @@ export default function ProductsPage() {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [priceRange, setPriceRange] = useState([0, 500]);
   const [filterOpen, setFilterOpen] = useState(false);
+  const [user, setUser] = useState<FirebaseUser | null>(null);
+  const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+  const searchParams = useSearchParams();
 
   useEffect(() => {
     const unsub = subscribeProducts(setProducts);
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    const unsub = subscribeCategories(setCategories);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeAuth(setUser);
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeUserWishlistProductIds(user?.uid, setWishlistIds);
+    return () => unsub();
+  }, [user?.uid]);
+
+  const categoryOptions = useMemo(() => {
+    const set = new Set(categories);
+    for (const p of products) set.add(p.category);
+    return ['All', ...[...set].filter(Boolean).sort((a, b) => a.localeCompare(b))];
+  }, [categories, products]);
+
+  useEffect(() => {
+    const requested = (searchParams.get('category') || '').trim();
+    if (!requested) return;
+    const match = categoryOptions.find((c) => c.toLowerCase() === requested.toLowerCase());
+    if (match) setSelectedCategory(match);
+  }, [searchParams, categoryOptions]);
 
   const addToCart = (productId: string) => {
     const product = products.find(p => p.id === productId);
@@ -49,6 +86,16 @@ export default function ProductsPage() {
   }, [products, selectedCategory, search, priceRange, sortBy]);
 
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
+
+  const toggleWishlist = async (productId: string) => {
+    if (!user) {
+      window.alert('Please login to add products to wishlist.');
+      return;
+    }
+    const isWishlisted = wishlistIds.includes(productId);
+    if (isWishlisted) await removeFromWishlist(user.uid, productId);
+    else await addToWishlist(user, productId);
+  };
 
   return (
     <>
@@ -92,7 +139,7 @@ export default function ProductsPage() {
                 <div>
                   <h3 className="font-display text-sm text-cocoa-800 mb-3">Category</h3>
                   <div className="space-y-1.5">
-                    {CATEGORIES.map(cat => (
+                    {categoryOptions.map(cat => (
                       <button key={cat} onClick={() => setSelectedCategory(cat)} className={`w-full text-left px-3 py-2 rounded-lg text-sm ${selectedCategory === cat ? 'bg-blush-100 text-blush-700 font-medium' : 'text-cocoa-700/70 hover:bg-cream-100'}`}>
                         {cat}
                         <span className="float-right text-xs text-cocoa-700/40">{cat === 'All' ? products.length : products.filter(p => p.category === cat).length}</span>
@@ -111,7 +158,7 @@ export default function ProductsPage() {
               <div className="flex items-center justify-between mb-4"><p className="text-sm text-cocoa-700/60">{filtered.length} products</p></div>
               <div className={gridView ? 'grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5' : 'flex flex-col gap-4'}>
                 {filtered.map(product => (
-                  gridView ? <ProductCard key={product.id} product={product} onAddToCart={addToCart} /> : (
+                  gridView ? <ProductCard key={product.id} product={product} onAddToCart={addToCart} isWishlisted={wishlistIds.includes(product.id)} onToggleWishlist={toggleWishlist} /> : (
                     <div key={product.id} className="bg-white rounded-2xl flex gap-4 p-4 shadow-sm">
                       <img src={product.image} alt={product.name} className="w-32 h-32 rounded-xl object-cover shrink-0" />
                       <div className="flex-1">
