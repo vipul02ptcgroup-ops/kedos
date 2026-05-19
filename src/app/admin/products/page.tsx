@@ -49,7 +49,7 @@ export default function AdminProductsPage() {
   const categoriesForForm = useMemo(() => {
     const set = new Set(categories);
     for (const p of products) set.add(p.category);
-    return [...set].filter(Boolean).sort((a, b) => a.localeCompare(b));
+    return Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b));
   }, [categories, products]);
 
   const filterCategories = useMemo(() => ['All', ...categoriesForForm], [categoriesForForm]);

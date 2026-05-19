@@ -51,7 +51,7 @@ export default function ProductsPage() {
   const categoryOptions = useMemo(() => {
     const set = new Set(categories);
     for (const p of products) set.add(p.category);
-    return ['All', ...[...set].filter(Boolean).sort((a, b) => a.localeCompare(b))];
+    return ['All', ...Array.from(set).filter(Boolean).sort((a, b) => a.localeCompare(b))];
   }, [categories, products]);
 
   useEffect(() => {
