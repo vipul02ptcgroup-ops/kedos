@@ -8,7 +8,6 @@ import Footer from '@/components/layout/Footer';
 import CartDrawer from '@/components/cart/CartDrawer';
 import { subscribeProducts } from '@/lib/products';
 import { subscribeCategories } from '@/lib/categories';
-import { useSearchParams } from 'next/navigation';
 import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
@@ -26,7 +25,7 @@ export default function ProductsPage() {
   const [filterOpen, setFilterOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
-  const searchParams = useSearchParams();
+  const [requestedCategory, setRequestedCategory] = useState('');
 
   useEffect(() => {
     const unsub = subscribeProducts(setProducts);
@@ -55,11 +54,17 @@ export default function ProductsPage() {
   }, [categories, products]);
 
   useEffect(() => {
-    const requested = (searchParams.get('category') || '').trim();
+    const params = new URLSearchParams(window.location.search);
+    const requested = (params.get('category') || '').trim();
+    setRequestedCategory(requested);
+  }, []);
+
+  useEffect(() => {
+    const requested = requestedCategory;
     if (!requested) return;
     const match = categoryOptions.find((c) => c.toLowerCase() === requested.toLowerCase());
     if (match) setSelectedCategory(match);
-  }, [searchParams, categoryOptions]);
+  }, [requestedCategory, categoryOptions]);
 
   const addToCart = (productId: string) => {
     const product = products.find(p => p.id === productId);

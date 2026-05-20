@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { CheckCircle, Package, Truck, Home, ShoppingBag } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -22,12 +21,15 @@ type SnapshotOrder = {
 };
 
 export default function OrderSuccessPage() {
-  const searchParams = useSearchParams();
   const [order, setOrder] = useState<FirestoreOrder | null>(null);
   const [snapshotOrder, setSnapshotOrder] = useState<SnapshotOrder | null>(null);
   const [loading, setLoading] = useState(true);
+  const [orderId, setOrderId] = useState('');
 
-  const orderId = searchParams.get('orderId') || '';
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    setOrderId(params.get('orderId') || '');
+  }, []);
 
   useEffect(() => {
     let active = true;
