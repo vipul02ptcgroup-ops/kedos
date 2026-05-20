@@ -1,7 +1,8 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Avoid OneDrive reparse-point issues on the default `.next` directory.
-  distDir: '.next-build',
+  // Keep Vercel on the default `.next` output directory.
+  // Use a custom local dir to avoid OneDrive reparse-point issues on Windows.
+  ...(process.env.VERCEL ? {} : { distDir: '.next-build' }),
   images: {
     remotePatterns: [
       { protocol: 'https', hostname: 'images.unsplash.com' },
