@@ -1,7 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
 import { ShoppingBag, Heart, MapPin, LogOut, ChevronRight, Package, Star, Edit3 } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -32,7 +31,6 @@ const STATUS_COLORS: Record<string, string> = {
 
 export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState('Overview');
-  const searchParams = useSearchParams();
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [checkingAuth, setCheckingAuth] = useState(true);
   const [orders, setOrders] = useState<FirestoreOrder[]>([]);
@@ -72,11 +70,13 @@ export default function ProfilePage() {
   const wishlistProducts = products.filter((p) => wishlistIds.includes(p.id));
 
   useEffect(() => {
-    const tab = (searchParams.get('tab') || '').trim();
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const tab = (params.get('tab') || '').trim();
     if (!tab) return;
     const match = TABS.find((t) => t.toLowerCase() === tab.toLowerCase());
     if (match) setActiveTab(match);
-  }, [searchParams]);
+  }, []);
 
   useEffect(() => {
     const unsub = subscribeAuth((u) => {
