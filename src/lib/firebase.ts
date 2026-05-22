@@ -14,20 +14,27 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const canInitializeFirebase = Boolean(
-  typeof window !== 'undefined' &&
-    firebaseConfig.apiKey &&
-    firebaseConfig.authDomain &&
-    firebaseConfig.projectId &&
-    firebaseConfig.messagingSenderId &&
-    firebaseConfig.appId
-);
+const missingFirebaseConfig = Object.entries({
+  NEXT_PUBLIC_FIREBASE_API_KEY: firebaseConfig.apiKey,
+  NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: firebaseConfig.authDomain,
+  NEXT_PUBLIC_FIREBASE_PROJECT_ID: firebaseConfig.projectId,
+  NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: firebaseConfig.messagingSenderId,
+  NEXT_PUBLIC_FIREBASE_APP_ID: firebaseConfig.appId,
+})
+  .filter(([, value]) => !String(value || '').trim())
+  .map(([key]) => key);
+
+const canInitializeFirebase = missingFirebaseConfig.length === 0;
 
 const app = canInitializeFirebase
   ? getApps().length
     ? getApp()
     : initializeApp(firebaseConfig)
   : null;
+
+export const firebaseClientInitError = canInitializeFirebase
+  ? null
+  : `Missing Firebase client env vars: ${missingFirebaseConfig.join(', ')}`;
 
 export const auth = app ? getAuth(app) : (null as any);
 export const db = app ? getFirestore(app) : (null as any);
