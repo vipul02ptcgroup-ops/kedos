@@ -1,9 +1,9 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Current app uses client-side role checks (not Firebase Auth custom claims).
-    // Keep permissive rules so existing reads/writes continue to work.
-    // Tighten this once server-enforced auth/authorization is added.
+    // Current app uses client-side role checks (no server-enforced admin auth yet).
+    // Keep permissive so login/register/profile/admin flows work.
+    // IMPORTANT: tighten these rules once server-side auth/claims are added.
     match /{document=**} {
       allow read, write: if true;
     }
