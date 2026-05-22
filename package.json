@@ -6,7 +6,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "firebase:deploy": "firebase deploy --project kedos-ff9c7 --only firestore,storage",
+    "firebase:deploy:rules": "firebase deploy --project kedos-ff9c7 --only firestore:rules,firestore:indexes,storage"
   },
   "dependencies": {
     "clsx": "^2.1.1",

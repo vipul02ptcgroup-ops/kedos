@@ -21,6 +21,15 @@ const emptyProduct: Omit<Product, 'id'> = {
   ageRange: '',
 };
 
+function normalizeImageUrl(value: string) {
+  const raw = String(value || '').trim();
+  if (!raw) return '';
+  if (raw.startsWith('http://') || raw.startsWith('https://') || raw.startsWith('/')) return raw;
+  if (raw.startsWith('gs://')) return raw;
+  if (raw.includes('.')) return `https://${raw}`;
+  return raw;
+}
+
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -68,7 +77,15 @@ export default function AdminProductsPage() {
 
   const openForEdit = (product: Product) => {
     setEditProduct(product);
-    setForm({ ...product, images: product.images?.length ? product.images : product.image ? [product.image] : [] });
+    const normalizedImage = normalizeImageUrl(product.image || '');
+    const normalizedImages = (product.images?.length ? product.images : product.image ? [product.image] : [])
+      .map((img) => normalizeImageUrl(img))
+      .filter(Boolean);
+    setForm({
+      ...product,
+      image: normalizedImage || normalizedImages[0] || '',
+      images: normalizedImages,
+    });
     setShowModal(true);
   };
 
@@ -105,7 +122,7 @@ export default function AdminProductsPage() {
         })
       );
       setForm((prev) => {
-        const images = [...(prev.images || []), ...uploaded];
+        const images = [...(prev.images || []), ...uploaded].map((img) => normalizeImageUrl(img)).filter(Boolean);
         return { ...prev, image: images[0] || prev.image, images };
       });
     } catch (error: any) {
@@ -180,7 +197,7 @@ export default function AdminProductsPage() {
                   <tr key={p.id} className="hover:bg-slate-50">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
-                        <img src={p.image} alt={p.name} className="w-12 h-12 rounded-xl object-cover" />
+                        <img src={normalizeImageUrl(p.image) || '/Images/Logo.png'} alt={p.name} className="w-12 h-12 rounded-xl object-cover" />
                         <div>
                           <div className="text-sm font-medium text-slate-800 line-clamp-1 max-w-[180px]">{p.name}</div>
                         </div>
@@ -240,7 +257,14 @@ export default function AdminProductsPage() {
                 {uploadError && <p className="text-sm text-red-500 font-body">{uploadError}</p>}
                 <input
                   value={form.image}
-                  onChange={(e) => setForm({ ...form, image: e.target.value, images: e.target.value ? [e.target.value, ...((form.images || []).filter((img) => img !== e.target.value))] : form.images })}
+                  onChange={(e) => {
+                    const next = normalizeImageUrl(e.target.value);
+                    setForm({
+                      ...form,
+                      image: next,
+                      images: next ? [next, ...((form.images || []).filter((img) => img !== next))] : form.images,
+                    });
+                  }}
                   placeholder="Or paste main image URL"
                   className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
                 />
@@ -249,7 +273,7 @@ export default function AdminProductsPage() {
                     {form.images.map((img) => (
                       <div key={img} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200">
                         <button type="button" onClick={() => setPrimaryImage(img)} className="w-full h-full">
-                          <img src={img} alt="" className="w-full h-full object-cover" />
+                          <img src={normalizeImageUrl(img) || '/Images/Logo.png'} alt="" className="w-full h-full object-cover" />
                         </button>
                         {img === form.image && (
                           <span className="absolute left-1.5 bottom-1.5 rounded-md bg-blush-500 px-1.5 py-0.5 text-[10px] text-white">Main</span>

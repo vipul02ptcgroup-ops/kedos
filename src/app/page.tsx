@@ -131,7 +131,7 @@ export default function HomePage() {
                 </Link>
               </div>
               <div className="flex items-center gap-6 mt-10">
-                {[['10k+', 'Happy Parents'], ['500+', 'Products'], ['4.9?', 'Average Rating']].map(([val, label]) => (
+                {[['10k+', 'Happy Parents'], ['500+', 'Products'], ['4.9+', 'Average Rating']].map(([val, label]) => (
                   <div key={label}>
                     <div className="font-display text-2xl text-cocoa-800">{val}</div>
                     <div className="text-xs text-cocoa-700/60 font-body">{label}</div>

@@ -9,6 +9,7 @@ import Footer from '@/components/layout/Footer';
 import { subscribeProducts } from '@/lib/products';
 import { getUserProfile, subscribeAuth } from '@/lib/auth';
 import { createOrder } from '@/lib/orders';
+import { UserAddress, subscribeUserAddresses } from '@/lib/addresses';
 
 export default function CheckoutPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -22,6 +23,9 @@ export default function CheckoutPage() {
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [userId, setUserId] = useState('');
+  const [savedAddresses, setSavedAddresses] = useState<UserAddress[]>([]);
+  const [selectedAddressId, setSelectedAddressId] = useState('');
+  const [showAddressForm, setShowAddressForm] = useState(false);
   const router = useRouter();
   const [deliveryForm, setDeliveryForm] = useState({
     firstName: '',
@@ -58,6 +62,50 @@ export default function CheckoutPage() {
     });
     return () => unsub();
   }, []);
+
+  useEffect(() => {
+    if (!userId) {
+      setSavedAddresses([]);
+      setSelectedAddressId('');
+      setShowAddressForm(true);
+      return;
+    }
+    const unsub = subscribeUserAddresses(userId, (rows) => {
+      setSavedAddresses(rows);
+      setShowAddressForm(rows.length === 0);
+      const defaultAddress = rows.find((a) => a.isDefault) || rows[0];
+      if (!defaultAddress) return;
+      setSelectedAddressId(defaultAddress.id);
+      setDeliveryForm((prev) => ({
+        ...prev,
+        firstName: defaultAddress.firstName || prev.firstName,
+        lastName: defaultAddress.lastName || prev.lastName,
+        phone: defaultAddress.phone || prev.phone,
+        address: defaultAddress.addressLine || prev.address,
+        pin: defaultAddress.pin || prev.pin,
+        city: defaultAddress.city || prev.city,
+        state: defaultAddress.state || prev.state,
+      }));
+    });
+    return () => unsub();
+  }, [userId]);
+
+  const applyAddressById = (addressId: string) => {
+    setSelectedAddressId(addressId);
+    setShowAddressForm(false);
+    const address = savedAddresses.find((a) => a.id === addressId);
+    if (!address) return;
+    setDeliveryForm((prev) => ({
+      ...prev,
+      firstName: address.firstName || prev.firstName,
+      lastName: address.lastName || prev.lastName,
+      phone: address.phone || prev.phone,
+      address: address.addressLine || prev.address,
+      pin: address.pin || prev.pin,
+      city: address.city || prev.city,
+      state: address.state || prev.state,
+    }));
+  };
 
   useEffect(() => {
     const pin = deliveryForm.pin.trim();
@@ -243,7 +291,45 @@ export default function CheckoutPage() {
               {step === 1 && (
                 <div className="bg-white rounded-2xl shadow-sm p-6">
                   <h2 className="font-display text-xl text-cocoa-800 mb-5">Delivery Information</h2>
-                  <div className="space-y-4">
+                  <div className="mb-5">
+                    <label className="block text-sm font-medium text-cocoa-800 font-body mb-2">Saved Addresses</label>
+                    <div className="grid sm:grid-cols-2 gap-3">
+                      {savedAddresses.map((a) => (
+                        <button
+                          key={a.id}
+                          type="button"
+                          onClick={() => applyAddressById(a.id)}
+                          className={`text-left rounded-xl border p-3 transition-colors ${
+                            selectedAddressId === a.id && !showAddressForm
+                              ? 'border-blush-400 bg-blush-50'
+                              : 'border-cream-200 hover:border-cream-300 bg-white'
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-1">
+                            <p className="text-sm font-medium text-cocoa-800">{a.label || 'Address'}</p>
+                            {a.isDefault && <span className="text-[11px] px-2 py-0.5 rounded-full bg-sage-100 text-sage-700">Default</span>}
+                          </div>
+                          <p className="text-xs text-cocoa-700/70 line-clamp-2">{a.addressLine}, {a.city}, {a.state} - {a.pin}</p>
+                          <p className="text-xs text-cocoa-700/60 mt-1">{a.firstName} {a.lastName} · {a.phone}</p>
+                        </button>
+                      ))}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedAddressId('');
+                          setShowAddressForm((prev) => !prev);
+                        }}
+                        className={`rounded-xl border border-dashed p-3 text-left transition-colors ${
+                          showAddressForm ? 'border-blush-400 bg-blush-50' : 'border-cream-300 hover:border-blush-300'
+                        }`}
+                      >
+                        <p className="text-sm font-medium text-blush-600">+ Address</p>
+                        <p className="text-xs text-cocoa-700/60 mt-1">Add a new delivery address</p>
+                      </button>
+                    </div>
+                  </div>
+                  {showAddressForm && (
+                    <div className="space-y-4">
                     <div className="grid sm:grid-cols-2 gap-4">
                       {[['firstName', 'First Name'], ['lastName', 'Last Name']].map(([key, lbl]) => (
                         <div key={lbl}>
@@ -321,7 +407,8 @@ export default function CheckoutPage() {
                     {!pinError && isPinValid && deliveryForm.pin && (
                       <p className="text-xs font-body text-sage-600">PIN verified successfully.</p>
                     )}
-                  </div>
+                    </div>
+                  )}
                   <div className="mt-4 p-4 bg-cream-50 rounded-xl space-y-3">
                     <p className="text-sm font-medium text-cocoa-800 font-body">Delivery Method</p>
                     {[

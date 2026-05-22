@@ -81,18 +81,14 @@ export async function registerWithEmail(params: {
   if (params.name) {
     await updateProfile(credential.user, { displayName: params.name });
   }
-  void upsertUserProfile({ user: credential.user, name: params.name, phone: params.phone }).catch((err) => {
-    console.warn('Profile sync failed after register:', err);
-  });
+  await upsertUserProfile({ user: credential.user, name: params.name, phone: params.phone });
   return credential.user;
 }
 
 export async function loginWithEmail(email: string, password: string) {
   assertFirebaseReady();
   const credential = await signInWithEmailAndPassword(auth, email, password);
-  void upsertUserProfile({ user: credential.user }).catch((err) => {
-    console.warn('Profile sync failed after login:', err);
-  });
+  await upsertUserProfile({ user: credential.user });
   return credential.user;
 }
 
@@ -100,9 +96,7 @@ export async function continueWithGoogle() {
   assertFirebaseReady();
   const provider = new GoogleAuthProvider();
   const credential = await signInWithPopup(auth, provider);
-  void upsertUserProfile({ user: credential.user }).catch((err) => {
-    console.warn('Profile sync failed after Google sign-in:', err);
-  });
+  await upsertUserProfile({ user: credential.user });
   return credential.user;
 }
 
@@ -129,10 +123,43 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
   };
 }
 
+export async function updateUserSettings(params: {
+  user: User;
+  name: string;
+  phone: string;
+}): Promise<void> {
+  assertFirebaseReady();
+  const cleanName = params.name.trim();
+  const cleanPhone = params.phone.trim();
+
+  if (cleanName && cleanName !== (params.user.displayName || '').trim()) {
+    await updateProfile(params.user, { displayName: cleanName });
+  }
+
+  await upsertUserProfile({
+    user: params.user,
+    name: cleanName,
+    phone: cleanPhone,
+  });
+}
+
 export function subscribeAuth(callback: (user: User | null) => void) {
-  return onAuthStateChanged(auth, callback);
+  if (!auth) {
+    callback(null);
+    return () => {};
+  }
+  return onAuthStateChanged(auth, (user) => {
+    if (user && db) {
+      // Self-heal missing users/{uid} document for role-based flows.
+      void upsertUserProfile({ user }).catch((err) => {
+        console.warn('Profile sync failed on auth state change:', err);
+      });
+    }
+    callback(user);
+  });
 }
 
 export async function logoutUser() {
+  assertFirebaseReady();
   await signOut(auth);
 }

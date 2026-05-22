@@ -76,9 +76,9 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
               <button className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
                 <Search size={18} />
               </button>
-              <button className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
+              <Link href="/profile?tab=Wishlist" className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
                 <Heart size={18} />
-              </button>
+              </Link>
               <Link href="/profile" className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
                 <User size={18} />
               </Link>
