@@ -54,6 +54,8 @@ export default function ProfilePage() {
   const [isPinLoading, setIsPinLoading] = useState(false);
   const [pinError, setPinError] = useState('');
   const [isPinValid, setIsPinValid] = useState(false);
+  const [isPinTrusted, setIsPinTrusted] = useState(false);
+  const [allowManualLocation, setAllowManualLocation] = useState(false);
   const [settingsName, setSettingsName] = useState('');
   const [settingsEmail, setSettingsEmail] = useState('');
   const [settingsPhone, setSettingsPhone] = useState('');
@@ -174,6 +176,9 @@ export default function ProfilePage() {
   };
 
   const resetAddressForm = () => {
+    setIsPinTrusted(false);
+    setIsPinValid(false);
+    setPinError('');
     setAddressForm({
       label: 'Home',
       firstName: profileName.split(' ')[0] || '',
@@ -189,6 +194,10 @@ export default function ProfilePage() {
   };
 
   const startEditAddress = (address: UserAddress) => {
+    const hasTrustedPin = /^\d{6}$/.test((address.pin || '').trim()) && Boolean(address.city?.trim() && address.state?.trim());
+    setIsPinTrusted(hasTrustedPin);
+    setIsPinValid(hasTrustedPin);
+    setPinError('');
     setAddressForm({
       label: address.label || 'Home',
       firstName: address.firstName || '',
@@ -218,8 +227,13 @@ export default function ProfilePage() {
       return;
     }
     if (!isPinValid) {
-      window.alert('Please enter a valid PIN before saving address.');
-      return;
+      const hasManualLocation = Boolean(addressForm.city.trim() && addressForm.state.trim());
+      if (/^\d{6}$/.test(addressForm.pin.trim()) && hasManualLocation) {
+        // allow manual city/state fallback when PIN API is unavailable
+      } else {
+        window.alert('Please enter a valid PIN or provide city/state manually.');
+        return;
+      }
     }
 
     const payload = {
@@ -241,9 +255,12 @@ export default function ProfilePage() {
 
   useEffect(() => {
     const pin = addressForm.pin.trim();
+    const hasCityState = Boolean(addressForm.city.trim() && addressForm.state.trim());
     if (!pin) {
       setPinError('');
       setIsPinValid(false);
+      setIsPinTrusted(false);
+      setAllowManualLocation(false);
       setAddressForm((prev) => ({ ...prev, city: '', state: '' }));
       return;
     }
@@ -251,7 +268,16 @@ export default function ProfilePage() {
     if (!/^\d{6}$/.test(pin)) {
       setPinError('PIN must be 6 digits.');
       setIsPinValid(false);
+      setIsPinTrusted(false);
+      setAllowManualLocation(false);
       setAddressForm((prev) => ({ ...prev, city: '', state: '' }));
+      return;
+    }
+
+    if (isPinTrusted && hasCityState) {
+      setPinError('');
+      setIsPinValid(true);
+      setIsPinLoading(false);
       return;
     }
 
@@ -260,20 +286,19 @@ export default function ProfilePage() {
       try {
         setIsPinLoading(true);
         setPinError('');
-        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+        const res = await fetch(`/api/pincode/${pin}`);
         const data = await res.json();
-        const postOffice = data?.[0]?.PostOffice?.[0];
         if (cancelled) return;
 
-        if (!postOffice || data?.[0]?.Status !== 'Success') {
+        if (!res.ok || !data?.ok) {
           setIsPinValid(false);
           setPinError('Invalid PIN code. Please enter a valid PIN.');
           setAddressForm((prev) => ({ ...prev, city: '', state: '' }));
           return;
         }
 
-        const city = (postOffice.District || '').trim();
-        const state = (postOffice.State || '').trim();
+        const city = String(data?.city || '').trim();
+        const state = String(data?.state || '').trim();
         if (!city || !state) {
           setIsPinValid(false);
           setPinError('Could not fetch city/state for this PIN.');
@@ -282,12 +307,13 @@ export default function ProfilePage() {
         }
 
         setAddressForm((prev) => ({ ...prev, city, state }));
+        setAllowManualLocation(false);
         setIsPinValid(true);
       } catch {
         if (cancelled) return;
         setIsPinValid(false);
-        setPinError('Unable to verify PIN right now. Please try again.');
-        setAddressForm((prev) => ({ ...prev, city: '', state: '' }));
+        setAllowManualLocation(true);
+        setPinError('Unable to verify PIN right now. Enter city/state manually and save.');
       } finally {
         if (!cancelled) setIsPinLoading(false);
       }
@@ -297,7 +323,7 @@ export default function ProfilePage() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [addressForm.pin]);
+  }, [addressForm.pin, addressForm.city, addressForm.state, isPinTrusted]);
 
   if (checkingAuth) {
     return (
@@ -459,9 +485,12 @@ export default function ProfilePage() {
                 </div>
                 <textarea value={addressForm.addressLine} onChange={(e) => setAddressForm((prev) => ({ ...prev, addressLine: e.target.value }))} rows={3} placeholder="Full address" className="w-full px-3 py-2.5 rounded-xl border border-cream-200 bg-cream-50 text-sm resize-none" />
                 <div className="grid grid-cols-3 gap-3">
-                  <input value={addressForm.pin} onChange={(e) => setAddressForm((prev) => ({ ...prev, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }))} placeholder="PIN" className="px-3 py-2.5 rounded-xl border border-cream-200 bg-cream-50 text-sm" />
-                  <input value={addressForm.city} readOnly placeholder="City (auto-filled)" className="px-3 py-2.5 rounded-xl border border-cream-200 bg-cream-100 text-sm" />
-                  <input value={addressForm.state} readOnly placeholder="State (auto-filled)" className="px-3 py-2.5 rounded-xl border border-cream-200 bg-cream-100 text-sm" />
+                  <input value={addressForm.pin} onChange={(e) => {
+                    setIsPinTrusted(false);
+                    setAddressForm((prev) => ({ ...prev, pin: e.target.value.replace(/\D/g, '').slice(0, 6) }));
+                  }} placeholder="PIN" className="px-3 py-2.5 rounded-xl border border-cream-200 bg-cream-50 text-sm" />
+                  <input value={addressForm.city} readOnly={!allowManualLocation} onChange={(e) => setAddressForm((prev) => ({ ...prev, city: e.target.value }))} placeholder={allowManualLocation ? 'Enter city' : 'City (auto-filled)'} className={`px-3 py-2.5 rounded-xl border border-cream-200 text-sm ${allowManualLocation ? 'bg-cream-50' : 'bg-cream-100'}`} />
+                  <input value={addressForm.state} readOnly={!allowManualLocation} onChange={(e) => setAddressForm((prev) => ({ ...prev, state: e.target.value }))} placeholder={allowManualLocation ? 'Enter state' : 'State (auto-filled)'} className={`px-3 py-2.5 rounded-xl border border-cream-200 text-sm ${allowManualLocation ? 'bg-cream-50' : 'bg-cream-100'}`} />
                 </div>
                 {isPinLoading && <p className="text-xs font-body text-cocoa-700/60">Verifying PIN...</p>}
                 {pinError && <p className="text-xs font-body text-red-600">{pinError}</p>}

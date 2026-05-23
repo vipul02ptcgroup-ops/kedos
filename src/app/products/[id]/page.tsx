@@ -13,11 +13,17 @@ import ProductSeo from '@/components/seo/ProductSeo';
 import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
+import { toSlug } from '@/lib/slug';
 
 export default function ProductDetailPage() {
-  const { id } = useParams();
+  const params = useParams();
+  const routeValue = Array.isArray(params?.id) ? params.id[0] : params?.id;
+  const routeKey = String(routeValue || '');
   const [products, setProducts] = useState<Product[]>([]);
-  const product = useMemo(() => products.find(p => p.id === id), [products, id]);
+  const product = useMemo(
+    () => products.find((p) => p.id === routeKey || toSlug(p.name) === routeKey),
+    [products, routeKey]
+  );
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
   const [cartOpen, setCartOpen] = useState(false);
@@ -32,6 +38,13 @@ export default function ProductDetailPage() {
     return images.filter(Boolean);
   }, [product]);
   const activeImage = galleryImages[activeImageIndex] || product?.image || '';
+  const normalizedFeatures = useMemo(() => {
+    if (!product?.features?.length) return [];
+    return product.features
+      .flatMap((item) => String(item).split(','))
+      .map((item) => item.trim())
+      .filter(Boolean);
+  }, [product?.features]);
 
   useEffect(() => {
     const unsub = subscribeProducts(setProducts);
@@ -62,12 +75,12 @@ export default function ProductDetailPage() {
   }, [galleryImages.length]);
 
   const addToCart = (productId?: string) => {
-    const pid = productId || id as string;
+    const pid = productId || product?.id || routeKey;
     const prod = products.find(p => p.id === pid);
     if (!prod) return;
     setCartItems(prev => {
       const ex = prev.find(i => i.id === pid);
-      const addQty = pid === id ? qty : 1;
+      const addQty = pid === product?.id ? qty : 1;
       if (ex) return prev.map(i => i.id === pid ? { ...i, quantity: i.quantity + addQty } : i);
       return [...prev, { ...prod, quantity: addQty }];
     });
@@ -76,7 +89,7 @@ export default function ProductDetailPage() {
   };
 
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
-  const related = products.filter(p => p.id !== id && p.category === product?.category).slice(0, 4);
+  const related = products.filter(p => p.id !== product?.id && p.category === product?.category).slice(0, 4);
   const isWishlisted = !!product && wishlistIds.includes(product.id);
 
   const toggleWishlist = async (productId: string) => {
@@ -283,9 +296,9 @@ export default function ProductDetailPage() {
                 {activeTab === 'description' && (
                   <p className="text-sm text-cocoa-700/80 font-body leading-relaxed">{product.description}</p>
                 )}
-                {activeTab === 'features' && product.features && (
+                {activeTab === 'features' && normalizedFeatures.length > 0 && (
                   <ul className="space-y-2">
-                    {product.features.map(f => (
+                    {normalizedFeatures.map(f => (
                       <li key={f} className="flex items-center gap-2 text-sm font-body text-cocoa-700/80">
                         <Check size={15} className="text-sage-500 shrink-0" />
                         {f}

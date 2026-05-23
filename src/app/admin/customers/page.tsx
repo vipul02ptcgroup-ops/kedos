@@ -1,19 +1,76 @@
 'use client';
-import { useState } from 'react';
-import { Search, Mail, Eye, UserCheck, UserX, TrendingUp, Users, ShoppingBag, DollarSign } from 'lucide-react';
-import { CUSTOMERS } from '@/lib/data';
+import { useEffect, useMemo, useState } from 'react';
+import { Search, Mail, Users, ShieldCheck, UserRound } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
+import { collection, onSnapshot, query } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+import { UserRole } from '@/lib/auth';
+
+type AdminUserRow = {
+  id: string;
+  uid: string;
+  name: string;
+  email: string;
+  phone: string;
+  role: UserRole;
+  createdAt?: any;
+};
+
+function formatJoined(createdAt: any): string {
+  const date = createdAt?.toDate?.();
+  if (!date) return '-';
+  return date.toLocaleDateString('en-IN');
+}
 
 export default function AdminCustomersPage() {
   const [search, setSearch] = useState('');
-  const [filter, setFilter] = useState('all');
+  const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
 
-  const filtered = CUSTOMERS
-    .filter(c => filter === 'all' || c.status === filter)
-    .filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || c.email.toLowerCase().includes(search.toLowerCase()));
+  useEffect(() => {
+    if (!db) return;
+    const q = query(collection(db, 'users'));
+    const unsub = onSnapshot(q, (snap) => {
+      const rows: AdminUserRow[] = snap.docs.map((d) => {
+        const data: any = d.data() || {};
+        const role: UserRole = data?.role === 'admin' ? 'admin' : 'customer';
+        return {
+          id: d.id,
+          uid: String(data?.uid || d.id),
+          name: String(data?.name || '').trim(),
+          email: String(data?.email || '').trim(),
+          phone: String(data?.phone || '').trim(),
+          role,
+          createdAt: data?.createdAt,
+        };
+      });
+      setUsers(rows);
+    });
+    return () => unsub();
+  }, []);
 
-  const totalRevenue = CUSTOMERS.reduce((s, c) => s + c.spent, 0);
-  const avgOrderValue = CUSTOMERS.reduce((s, c) => s + c.spent, 0) / CUSTOMERS.reduce((s, c) => s + c.orders, 0);
+  const filtered = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return users
+      .filter((u) => roleFilter === 'all' || u.role === roleFilter)
+      .filter((u) => {
+        if (!term) return true;
+        return (
+          u.name.toLowerCase().includes(term) ||
+          u.email.toLowerCase().includes(term) ||
+          u.phone.toLowerCase().includes(term) ||
+          u.uid.toLowerCase().includes(term)
+        );
+      })
+      .sort((a, b) => {
+        const ad = a.createdAt?.seconds || 0;
+        const bd = b.createdAt?.seconds || 0;
+        return bd - ad;
+      });
+  }, [users, roleFilter, search]);
+
+  const totalAdmins = users.filter((u) => u.role === 'admin').length;
+  const totalCustomers = users.filter((u) => u.role === 'customer').length;
 
   return (
     <AdminLayout>
@@ -21,101 +78,115 @@ export default function AdminCustomersPage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="font-display text-2xl text-slate-800">Customers</h1>
-            <p className="text-sm text-slate-500 font-body">{CUSTOMERS.length} registered customers</p>
+            <p className="text-sm text-slate-500 font-body">{users.length} total users (admin + customer)</p>
           </div>
           <button className="flex items-center gap-2 bg-blush-500 hover:bg-blush-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm font-body transition-colors">
             <Mail size={15} /> Email All
           </button>
         </div>
 
-        {/* Stats */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-5">
-          {[
-            { icon: Users, label: 'Total Customers', val: CUSTOMERS.length, color: 'bg-blue-50 text-blue-600' },
-            { icon: UserCheck, label: 'Active', val: CUSTOMERS.filter(c => c.status === 'active').length, color: 'bg-green-50 text-green-600' },
-            { icon: DollarSign, label: 'Total Revenue', val: `₹${totalRevenue.toFixed(0)}`, color: 'bg-blush-50 text-blush-600' },
-            { icon: ShoppingBag, label: 'Avg. Order Value', val: `₹${avgOrderValue.toFixed(0)}`, color: 'bg-amber-50 text-amber-600' },
-          ].map(s => (
-            <div key={s.label} className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center gap-3">
-              <div className={`w-10 h-10 ${s.color} rounded-xl flex items-center justify-center shrink-0`}>
-                <s.icon size={18} />
-              </div>
-              <div>
-                <div className="font-display text-xl text-slate-800">{s.val}</div>
-                <div className="text-xs text-slate-500 font-body">{s.label}</div>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-5">
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-50 text-blue-600 rounded-xl flex items-center justify-center shrink-0">
+              <Users size={18} />
             </div>
-          ))}
+            <div>
+              <div className="font-display text-xl text-slate-800">{users.length}</div>
+              <div className="text-xs text-slate-500 font-body">Total Users</div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center gap-3">
+            <div className="w-10 h-10 bg-purple-50 text-purple-600 rounded-xl flex items-center justify-center shrink-0">
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <div className="font-display text-xl text-slate-800">{totalAdmins}</div>
+              <div className="text-xs text-slate-500 font-body">Admins</div>
+            </div>
+          </div>
+          <div className="bg-white rounded-2xl p-4 border border-slate-100 shadow-sm flex items-center gap-3">
+            <div className="w-10 h-10 bg-green-50 text-green-600 rounded-xl flex items-center justify-center shrink-0">
+              <UserRound size={18} />
+            </div>
+            <div>
+              <div className="font-display text-xl text-slate-800">{totalCustomers}</div>
+              <div className="text-xs text-slate-500 font-body">Customers</div>
+            </div>
+          </div>
         </div>
 
-        {/* Filters */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-5 flex gap-3">
           <div className="relative flex-1">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input value={search} onChange={e => setSearch(e.target.value)}
-              placeholder="Search customers..."
-              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 text-slate-800" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search users by name, email, phone or UID..."
+              className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-slate-200 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 text-slate-800"
+            />
           </div>
           <div className="flex gap-2">
-            {['all', 'active', 'inactive'].map(f => (
-              <button key={f} onClick={() => setFilter(f)}
+            {(['all', 'admin', 'customer'] as const).map((f) => (
+              <button
+                key={f}
+                onClick={() => setRoleFilter(f)}
                 className={`px-4 py-2 rounded-xl text-sm font-body capitalize transition-colors ${
-                  filter === f ? 'bg-blush-500 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}>{f}</button>
+                  roleFilter === f ? 'bg-blush-500 text-white' : 'border border-slate-200 text-slate-600 hover:bg-slate-50'
+                }`}
+              >
+                {f}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Table */}
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  {['Customer', 'Joined', 'Orders', 'Total Spent', 'Avg. Order', 'Status', 'Actions'].map(h => (
-                    <th key={h} className="px-4 py-3.5 text-left text-xs font-medium text-slate-500 font-body uppercase tracking-wide">{h}</th>
+                  {['User', 'Role', 'Phone', 'Joined', 'UID'].map((h) => (
+                    <th key={h} className="px-4 py-3.5 text-left text-xs font-medium text-slate-500 font-body uppercase tracking-wide">
+                      {h}
+                    </th>
                   ))}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-50">
-                {filtered.map(c => (
-                  <tr key={c.id} className="hover:bg-slate-50 transition-colors">
+                {filtered.map((u) => (
+                  <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-3">
                         <div className="w-9 h-9 bg-blush-100 rounded-full flex items-center justify-center">
-                          <span className="font-display text-sm text-blush-700">{c.name[0]}</span>
+                          <span className="font-display text-sm text-blush-700">{(u.name || u.email || 'U').charAt(0).toUpperCase()}</span>
                         </div>
                         <div>
-                          <div className="text-sm font-medium text-slate-800 font-body">{c.name}</div>
-                          <div className="text-xs text-slate-400 font-body">{c.email}</div>
+                          <div className="text-sm font-medium text-slate-800 font-body">{u.name || '-'}</div>
+                          <div className="text-xs text-slate-400 font-body">{u.email || '-'}</div>
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-sm text-slate-600 font-body">{c.joined}</td>
-                    <td className="px-4 py-4 text-sm font-medium text-slate-800 font-body">{c.orders}</td>
-                    <td className="px-4 py-4 font-display text-sm text-slate-800">₹{c.spent.toFixed(0)}</td>
-                    <td className="px-4 py-4 text-sm text-slate-600 font-body">₹{(c.spent / c.orders).toFixed(0)}</td>
                     <td className="px-4 py-4">
-                      <span className={`text-xs px-2.5 py-1 rounded-full font-body font-medium capitalize ${
-                        c.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'
-                      }`}>{c.status}</span>
+                      <span
+                        className={`text-xs px-2.5 py-1 rounded-full font-body font-medium capitalize ${
+                          u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                        }`}
+                      >
+                        {u.role}
+                      </span>
                     </td>
-                    <td className="px-4 py-4">
-                      <div className="flex items-center gap-1">
-                        <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-500 transition-colors">
-                          <Eye size={15} />
-                        </button>
-                        <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-purple-50 text-slate-400 hover:text-purple-500 transition-colors">
-                          <Mail size={15} />
-                        </button>
-                        {c.status === 'active'
-                          ? <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500 transition-colors"><UserX size={15} /></button>
-                          : <button className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-green-50 text-slate-400 hover:text-green-500 transition-colors"><UserCheck size={15} /></button>
-                        }
-                      </div>
-                    </td>
+                    <td className="px-4 py-4 text-sm text-slate-600 font-body">{u.phone || '-'}</td>
+                    <td className="px-4 py-4 text-sm text-slate-600 font-body">{formatJoined(u.createdAt)}</td>
+                    <td className="px-4 py-4 text-xs text-slate-500 font-mono">{u.uid}</td>
                   </tr>
                 ))}
+                {filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500 font-body">
+                      No users found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -124,3 +195,4 @@ export default function AdminCustomersPage() {
     </AdminLayout>
   );
 }
+

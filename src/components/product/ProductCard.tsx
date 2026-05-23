@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { ShoppingBag, Heart, Star } from 'lucide-react';
 import { Product } from '@/lib/data';
+import { getProductSlug } from '@/lib/slug';
 
 interface ProductCardProps {
   product: Product;
@@ -11,12 +12,13 @@ interface ProductCardProps {
 }
 
 export default function ProductCard({ product, onAddToCart, isWishlisted = false, onToggleWishlist }: ProductCardProps) {
+  const productPath = `/products/${getProductSlug(product)}`;
   const discount = product.originalPrice
     ? Math.round((1 - product.price / product.originalPrice) * 100)
     : null;
 
   return (
-    <Link href={`/products/${product.id}`}>
+    <Link href={productPath}>
             
           
     <div className="group relative bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
@@ -65,11 +67,9 @@ export default function ProductCard({ product, onAddToCart, isWishlisted = false
       {/* Content */}
       <div className="p-4">
         <p className="text-[11px] text-sage-600 font-medium uppercase tracking-wider font-body mb-1">{product.category}</p>
-        <Link href={`/products/${product.id}`}>
-          <h3 className="font-display text-base text-cocoa-800 leading-snug hover:text-blush-600 transition-colors line-clamp-2 mb-1">
-            {product.name}
-          </h3>
-        </Link>
+        <h3 className="font-display text-base text-cocoa-800 leading-snug hover:text-blush-600 transition-colors line-clamp-2 mb-1">
+          {product.name}
+        </h3>
 
         {/* Age range */}
         {product.ageRange && (

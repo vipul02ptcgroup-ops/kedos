@@ -15,6 +15,23 @@ import { Product } from '@/lib/data';
 
 const PRODUCTS_COLLECTION = 'products';
 
+function stripUndefinedDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => item !== undefined)
+      .map((item) => stripUndefinedDeep(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .map(([k, v]) => [k, stripUndefinedDeep(v)]);
+    return Object.fromEntries(entries) as T;
+  }
+
+  return value;
+}
+
 function normalizeProduct(id: string, data: any): Product {
   return {
     id,
@@ -51,10 +68,10 @@ export async function saveProduct(
   product: Omit<Product, 'id'> & { id?: string }
 ): Promise<string> {
   const { id, ...rest } = product;
-  const payload = {
+  const payload = stripUndefinedDeep({
     ...rest,
     updatedAt: serverTimestamp(),
-  };
+  });
 
   if (id) {
     const ref = doc(db, PRODUCTS_COLLECTION, id);

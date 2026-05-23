@@ -20,6 +20,8 @@ export default function CheckoutPage() {
   const [isPinLoading, setIsPinLoading] = useState(false);
   const [pinError, setPinError] = useState('');
   const [isPinValid, setIsPinValid] = useState(false);
+  const [isPinTrusted, setIsPinTrusted] = useState(false);
+  const [allowManualLocation, setAllowManualLocation] = useState(false);
   const [isPlacingOrder, setIsPlacingOrder] = useState(false);
   const [orderError, setOrderError] = useState('');
   const [userId, setUserId] = useState('');
@@ -76,6 +78,10 @@ export default function CheckoutPage() {
       const defaultAddress = rows.find((a) => a.isDefault) || rows[0];
       if (!defaultAddress) return;
       setSelectedAddressId(defaultAddress.id);
+      const hasTrustedPin = /^\d{6}$/.test((defaultAddress.pin || '').trim()) && Boolean(defaultAddress.city?.trim() && defaultAddress.state?.trim());
+      setIsPinTrusted(hasTrustedPin);
+      setIsPinValid(hasTrustedPin);
+      setPinError('');
       setDeliveryForm((prev) => ({
         ...prev,
         firstName: defaultAddress.firstName || prev.firstName,
@@ -95,6 +101,10 @@ export default function CheckoutPage() {
     setShowAddressForm(false);
     const address = savedAddresses.find((a) => a.id === addressId);
     if (!address) return;
+    const hasTrustedPin = /^\d{6}$/.test((address.pin || '').trim()) && Boolean(address.city?.trim() && address.state?.trim());
+    setIsPinTrusted(hasTrustedPin);
+    setIsPinValid(hasTrustedPin);
+    setPinError('');
     setDeliveryForm((prev) => ({
       ...prev,
       firstName: address.firstName || prev.firstName,
@@ -109,10 +119,13 @@ export default function CheckoutPage() {
 
   useEffect(() => {
     const pin = deliveryForm.pin.trim();
+    const hasCityState = Boolean(deliveryForm.city.trim() && deliveryForm.state.trim());
 
     if (!pin) {
       setPinError('');
       setIsPinValid(false);
+      setIsPinTrusted(false);
+      setAllowManualLocation(false);
       setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
       return;
     }
@@ -120,7 +133,16 @@ export default function CheckoutPage() {
     if (!/^\d{6}$/.test(pin)) {
       setPinError('PIN must be 6 digits.');
       setIsPinValid(false);
+      setIsPinTrusted(false);
+      setAllowManualLocation(false);
       setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+      return;
+    }
+
+    if (isPinTrusted && hasCityState) {
+      setPinError('');
+      setIsPinValid(true);
+      setIsPinLoading(false);
       return;
     }
 
@@ -130,21 +152,20 @@ export default function CheckoutPage() {
         setIsPinLoading(true);
         setPinError('');
 
-        const res = await fetch(`https://api.postalpincode.in/pincode/${pin}`);
+        const res = await fetch(`/api/pincode/${pin}`);
         const data = await res.json();
-        const postOffice = data?.[0]?.PostOffice?.[0];
 
         if (cancelled) return;
 
-        if (!postOffice || data?.[0]?.Status !== 'Success') {
+        if (!res.ok || !data?.ok) {
           setIsPinValid(false);
           setPinError('Invalid PIN code. Please enter a valid PIN.');
           setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
           return;
         }
 
-        const city = (postOffice.District || '').trim();
-        const state = (postOffice.State || '').trim();
+        const city = String(data?.city || '').trim();
+        const state = String(data?.state || '').trim();
         if (!city || !state) {
           setIsPinValid(false);
           setPinError('Could not fetch city/state for this PIN. Please use another PIN.');
@@ -157,12 +178,13 @@ export default function CheckoutPage() {
           city,
           state,
         }));
+        setAllowManualLocation(false);
         setIsPinValid(true);
       } catch {
         if (cancelled) return;
         setIsPinValid(false);
-        setPinError('Unable to verify PIN right now. Please try again.');
-        setDeliveryForm((prev) => ({ ...prev, city: '', state: '' }));
+        setAllowManualLocation(true);
+        setPinError('Unable to verify PIN right now. Enter city/state manually and continue.');
       } finally {
         if (!cancelled) setIsPinLoading(false);
       }
@@ -172,7 +194,7 @@ export default function CheckoutPage() {
       cancelled = true;
       clearTimeout(timeout);
     };
-  }, [deliveryForm.pin]);
+  }, [deliveryForm.pin, deliveryForm.city, deliveryForm.state, isPinTrusted]);
 
   const sampleItems = useMemo(() => {
     return products.slice(0, 2).map((item) => ({ ...item, quantity: 1 }));
@@ -182,13 +204,14 @@ export default function CheckoutPage() {
   const shipping = subtotal > 999 ? 0 : 99;
   const discount = couponApplied ? subtotal * 0.1 : 0;
   const total = subtotal + shipping - discount;
+  const hasManualLocation = Boolean(deliveryForm.city.trim() && deliveryForm.state.trim());
   const isDeliveryComplete = Boolean(
     deliveryForm.firstName.trim() &&
       deliveryForm.lastName.trim() &&
       deliveryForm.email.trim() &&
       deliveryForm.phone.trim() &&
       deliveryForm.address.trim() &&
-      isPinValid &&
+      (/^\d{6}$/.test(deliveryForm.pin.trim()) && (isPinValid || hasManualLocation)) &&
       deliveryForm.city.trim() &&
       deliveryForm.state.trim()
   );
@@ -317,6 +340,9 @@ export default function CheckoutPage() {
                         type="button"
                         onClick={() => {
                           setSelectedAddressId('');
+                          setIsPinTrusted(false);
+                          setIsPinValid(false);
+                          setPinError('');
                           setShowAddressForm((prev) => !prev);
                         }}
                         className={`rounded-xl border border-dashed p-3 text-left transition-colors ${
@@ -377,6 +403,7 @@ export default function CheckoutPage() {
                           maxLength={6}
                           onChange={(e) => {
                             const cleaned = e.target.value.replace(/\D/g, '');
+                            setIsPinTrusted(false);
                             setDeliveryForm((prev) => ({ ...prev, pin: cleaned }));
                           }}
                           className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 text-cocoa-800"
@@ -386,18 +413,20 @@ export default function CheckoutPage() {
                         <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">City *</label>
                         <input
                           value={deliveryForm.city}
-                          readOnly
-                          placeholder="Auto-filled from PIN"
-                          className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-100 text-sm font-body focus:outline-none text-cocoa-800"
+                          readOnly={!allowManualLocation}
+                          placeholder={allowManualLocation ? 'Enter city' : 'Auto-filled from PIN'}
+                          className={`w-full px-4 py-3 rounded-xl border border-cream-200 text-sm font-body focus:outline-none text-cocoa-800 ${allowManualLocation ? 'bg-cream-50 focus:ring-2 focus:ring-blush-300' : 'bg-cream-100'}`}
+                          onChange={(e) => setDeliveryForm((prev) => ({ ...prev, city: e.target.value }))}
                         />
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-cocoa-800 font-body mb-1.5">State *</label>
                         <input
                           value={deliveryForm.state}
-                          readOnly
-                          placeholder="Auto-filled from PIN"
-                          className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-100 text-sm font-body focus:outline-none text-cocoa-800"
+                          readOnly={!allowManualLocation}
+                          placeholder={allowManualLocation ? 'Enter state' : 'Auto-filled from PIN'}
+                          className={`w-full px-4 py-3 rounded-xl border border-cream-200 text-sm font-body focus:outline-none text-cocoa-800 ${allowManualLocation ? 'bg-cream-50 focus:ring-2 focus:ring-blush-300' : 'bg-cream-100'}`}
+                          onChange={(e) => setDeliveryForm((prev) => ({ ...prev, state: e.target.value }))}
                         />
                       </div>
                       

@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react';
 import { Product } from '@/lib/data';
+import { getProductSlug } from '@/lib/slug';
 
 const SITE_URL = 'https://kedos.in';
 
@@ -26,7 +27,7 @@ function upsertCanonical(url: string) {
 
 export default function ProductSeo({ product }: { product: Product }) {
   useEffect(() => {
-    const url = `${SITE_URL}/products/${product.id}`;
+    const url = `${SITE_URL}/products/${getProductSlug(product)}`;
     const title = `${product.name} | Kedos`;
     const description =
       product.description || `Shop ${product.name} from Kedos, curated baby products for safety, comfort, and joy.`;

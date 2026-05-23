@@ -6,15 +6,18 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import Link from 'next/link';
 import { removeProduct, saveProduct, subscribeProducts } from '@/lib/products';
 import { subscribeCategories } from '@/lib/categories';
+import { getProductSlug } from '@/lib/slug';
 
 const emptyProduct: Omit<Product, 'id'> = {
   name: '',
   price: 0,
+  originalPrice: undefined,
   category: '',
   image: '',
   images: [],
   rating: 0,
   reviews: 0,
+  badge: '',
   description: '',
   inStock: true,
   features: [],
@@ -91,7 +94,19 @@ export default function AdminProductsPage() {
 
   const onSave = async () => {
     const images = (form.images || []).filter(Boolean);
-    await saveProduct({ ...form, image: images[0] || form.image, images, id: editProduct?.id });
+    const features = (form.features || [])
+      .flatMap((item) => String(item).split(','))
+      .map((item) => item.trim())
+      .filter(Boolean);
+    await saveProduct({
+      ...form,
+      image: images[0] || form.image,
+      images,
+      features,
+      rating: Number.isFinite(form.rating) ? form.rating : 0,
+      reviews: Number.isFinite(form.reviews) ? form.reviews : 0,
+      id: editProduct?.id,
+    });
     setShowModal(false);
   };
 
@@ -209,7 +224,7 @@ export default function AdminProductsPage() {
                     <td className="px-4 py-4"><div className="flex items-center gap-1"><Star size={13} className="fill-amber-400 text-amber-400" />{p.rating}</div></td>
                     <td className="px-4 py-4">
                       <div className="flex items-center gap-1">
-                        <Link href={`/products/${p.id}`} target="_blank" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-500"><Eye size={15} /></Link>
+                        <Link href={`/products/${getProductSlug(p)}`} target="_blank" className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-blue-50 text-slate-400 hover:text-blue-500"><Eye size={15} /></Link>
                         <button onClick={() => openForEdit(p)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-amber-50 text-slate-400 hover:text-amber-500"><Edit2 size={15} /></button>
                         <button onClick={() => onDelete(p.id)} className="w-8 h-8 flex items-center justify-center rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 size={15} /></button>
                       </div>
@@ -225,23 +240,77 @@ export default function AdminProductsPage() {
 
       {showModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.5)' }}>
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg">
-            <div className="flex items-center justify-between p-6 border-b border-slate-100">
-              <h2 className="font-display text-xl text-slate-800">{editProduct ? 'Edit Product' : 'Add New Product'}</h2>
-              <button onClick={() => setShowModal(false)} className="w-8 h-8">X</button>
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-3xl max-h-[90vh] overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 bg-slate-50/70">
+              <div>
+                <h2 className="font-display text-xl text-slate-800">{editProduct ? 'Edit Product' : 'Add New Product'}</h2>
+                <p className="text-xs text-slate-500 font-body mt-0.5">Manage storefront details here</p>
+              </div>
+              <button onClick={() => setShowModal(false)} className="w-8 h-8 rounded-lg hover:bg-slate-100 text-slate-500">X</button>
             </div>
-            <div className="p-6 space-y-4">
+            <div className="p-6 space-y-6 max-h-[calc(90vh-140px)] overflow-y-auto">
+              <div className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Basic Info</h3>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="Product Name" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
               <div className="grid grid-cols-2 gap-4">
                 <input type="number" value={form.price} onChange={(e) => setForm({ ...form, price: Number(e.target.value) })} placeholder="Price" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
                 <input type="number" value={form.originalPrice || ''} onChange={(e) => setForm({ ...form, originalPrice: e.target.value ? Number(e.target.value) : undefined })} placeholder="Original Price" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
               </div>
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Catalog Details</h3>
+              <input
+                value={form.badge || ''}
+                onChange={(e) => setForm({ ...form, badge: e.target.value })}
+                placeholder="Badge (example: Bestseller)"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+              />
               <select value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })} className="w-full px-4 py-2.5 rounded-xl border border-slate-200">
                 {(categoriesForForm.length ? categoriesForForm : ['General']).map(c => <option key={c}>{c}</option>)}
               </select>
               <input value={form.ageRange || ''} onChange={(e) => setForm({ ...form, ageRange: e.target.value })} placeholder="Age Range" className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
+              </div>
+              <div className="space-y-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Ratings & Content</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <input
+                  type="number"
+                  min="0"
+                  max="5"
+                  step="0.1"
+                  value={form.rating}
+                  onChange={(e) => setForm({ ...form, rating: Number(e.target.value) })}
+                  placeholder="Rating (0 to 5)"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                />
+                <input
+                  type="number"
+                  min="0"
+                  value={form.reviews}
+                  onChange={(e) => setForm({ ...form, reviews: Number(e.target.value) })}
+                  placeholder="Reviews count"
+                  className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                />
+              </div>
               <textarea value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} rows={3} className="w-full px-4 py-2.5 rounded-xl border border-slate-200" />
+              <textarea
+                value={(form.features || []).join(', ')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    features: e.target.value
+                      .split(',')
+                      .map((line) => line.trim())
+                      .filter(Boolean),
+                  })
+                }
+                rows={3}
+                placeholder="Features separated by comma (example: Soft cotton, Skin-safe, Breathable)"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+              />
+              </div>
               <div className="space-y-3">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Images</h3>
                 <label className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-sm text-slate-600 cursor-pointer hover:border-blush-300 hover:bg-blush-50/40">
                   <Upload size={18} className="text-slate-400" />
                   <span>{uploading ? 'Uploading images...' : 'Upload multiple product images'}</span>
@@ -290,10 +359,12 @@ export default function AdminProductsPage() {
                   </div>
                 )}
               </div>
-              <label className="flex items-center gap-2"><input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />In Stock</label>
-              <div className="flex justify-end gap-2">
-                <button onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-200 rounded-xl">Cancel</button>
-                <button onClick={onSave} className="px-5 py-2.5 bg-blush-500 text-white rounded-xl">Save Product</button>
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 w-fit"><input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />In Stock</label>
+              <div className="sticky bottom-0 bg-white pt-2">
+                <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
+                  <button onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>
+                  <button onClick={onSave} className="px-5 py-2.5 bg-blush-500 hover:bg-blush-600 text-white rounded-xl">Save Product</button>
+                </div>
               </div>
             </div>
           </div>
