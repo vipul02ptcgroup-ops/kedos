@@ -101,6 +101,12 @@ export default function HomePage() {
     else await addToWishlist(user, productId);
   };
 
+  const newArrivals = useMemo(() => {
+    const flagged = products.filter((product) => product.newArrival);
+    if (flagged.length > 0) return flagged.slice(0, 4);
+    return products.slice(4, 8);
+  }, [products]);
+
   return (
     <>
       <Header cartCount={cartCount} onCartOpen={() => setCartOpen(true)} />
@@ -242,7 +248,7 @@ export default function HomePage() {
               </div>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-              {products.slice(4, 8).map((product) => (
+              {newArrivals.map((product) => (
                 <ProductCard key={product.id} product={product} onAddToCart={addToCart} isWishlisted={wishlistIds.includes(product.id)} onToggleWishlist={toggleWishlist} />
               ))}
             </div>

@@ -65,10 +65,10 @@ export default function Footer() {
           <h4 className="font-display text-base mb-4">Help</h4>
           <ul className="space-y-2.5">
             {[
-              { label: 'FAQ', href: '/contact' },
-              { label: 'Shipping Policy', href: '/' },
-              { label: 'Returns and Exchanges', href: '/' },
-              { label: 'Size Guide', href: '/' },
+              { label: 'FAQ', href: '/faq' },
+              { label: 'Shipping Policy', href: '/shipping-policy' },
+              { label: 'Returns and Exchanges', href: '/returns-and-exchanges' },
+              { label: 'Size Guide', href: '/size-guide' },
               { label: 'Track My Order', href: '/' },
               { label: 'Contact Us', href: '/contact' },
               { label: 'About Us', href: '/about' },

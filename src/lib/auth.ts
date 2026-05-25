@@ -1,8 +1,10 @@
 import {
   GoogleAuthProvider,
   User,
+  getRedirectResult,
   createUserWithEmailAndPassword,
   onAuthStateChanged,
+  signInWithRedirect,
   signInWithEmailAndPassword,
   signInWithPopup,
   signOut,
@@ -79,6 +81,16 @@ function getFirebaseErrorCode(error: unknown): string {
   return code;
 }
 
+function canFallbackToRedirect(error: unknown): boolean {
+  const code = getFirebaseErrorCode(error);
+  return (
+    code === 'auth/popup-blocked' ||
+    code === 'auth/cancelled-popup-request' ||
+    code === 'auth/internal-error' ||
+    code === 'auth/operation-not-supported-in-this-environment'
+  );
+}
+
 function normalizeFirebaseError(error: unknown): Error {
   const code = getFirebaseErrorCode(error);
   const msg = String((error as any)?.message || '').trim();
@@ -95,6 +107,14 @@ function normalizeFirebaseError(error: unknown): Error {
 
   if (code === 'auth/popup-closed-by-user') {
     return new Error('Google sign-in was closed before completion. Please try again.');
+  }
+
+  if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+    return new Error('Account not found. Please register first, then login.');
+  }
+
+  if (code === 'auth/wrong-password') {
+    return new Error('Incorrect password. Please try again.');
   }
 
   if (code === 'permission-denied' || /missing or insufficient permissions/i.test(msg)) {
@@ -149,23 +169,51 @@ export async function registerWithEmail(params: {
 
 export async function loginWithEmail(email: string, password: string) {
   assertFirebaseReady();
+  const cleanEmail = String(email || '').trim();
   try {
-    const credential = await signInWithEmailAndPassword(auth, email, password);
+    const credential = await signInWithEmailAndPassword(auth, cleanEmail, password);
     await syncUserProfileWithRetry(credential.user);
     return credential.user;
   } catch (error) {
+    const code = getFirebaseErrorCode(error);
+    if (code === 'auth/user-not-found' || code === 'auth/invalid-credential') {
+      try {
+        const created = await createUserWithEmailAndPassword(auth, cleanEmail, password);
+        await syncUserProfileWithRetry(created.user);
+        return created.user;
+      } catch (createError) {
+        throw normalizeFirebaseError(createError);
+      }
+    }
     throw normalizeFirebaseError(error);
   }
 }
 
-export async function continueWithGoogle() {
+export async function continueWithGoogle(): Promise<User | null> {
   assertFirebaseReady();
+  const provider = new GoogleAuthProvider();
+  provider.setCustomParameters({ prompt: 'select_account' });
+
   try {
-    const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: 'select_account' });
     const credential = await signInWithPopup(auth, provider);
     await syncUserProfileWithRetry(credential.user);
     return credential.user;
+  } catch (error) {
+    if (canFallbackToRedirect(error)) {
+      await signInWithRedirect(auth, provider);
+      return null;
+    }
+    throw normalizeFirebaseError(error);
+  }
+}
+
+export async function completeGoogleRedirectSignIn(): Promise<User | null> {
+  assertFirebaseReady();
+  try {
+    const result = await getRedirectResult(auth);
+    if (!result?.user) return null;
+    await syncUserProfileWithRetry(result.user);
+    return result.user;
   } catch (error) {
     throw normalizeFirebaseError(error);
   }

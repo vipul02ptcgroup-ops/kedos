@@ -48,6 +48,7 @@ function normalizeProduct(id: string, data: any): Product {
     features: Array.isArray(data?.features) ? data.features : [],
     ageRange: data?.ageRange || '',
     inStock: Boolean(data?.inStock),
+    newArrival: Boolean(data?.newArrival),
   };
 }
 

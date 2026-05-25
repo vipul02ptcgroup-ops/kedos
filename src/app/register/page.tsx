@@ -1,11 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Star, UserPlus, Check } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { continueWithGoogle, registerWithEmail } from '@/lib/auth';
+import { completeGoogleRedirectSignIn, continueWithGoogle, registerWithEmail } from '@/lib/auth';
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -13,6 +13,24 @@ export default function RegisterPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [form, setForm] = useState({ firstName: '', lastName: '', email: '', phone: '', password: '', terms: false });
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      try {
+        const user = await completeGoogleRedirectSignIn();
+        if (!active || !user) return;
+        router.push('/profile');
+      } catch (err: any) {
+        if (!active) return;
+        setError(err?.message || 'Google sign-in failed.');
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [router]);
 
   const passwordStrength = (p: string) => {
     if (p.length === 0) return 0;
@@ -49,7 +67,8 @@ export default function RegisterPage() {
     setLoading(true);
     setError('');
     try {
-      await continueWithGoogle();
+      const user = await continueWithGoogle();
+      if (!user) return;
       router.push('/profile');
     } catch (err: any) {
       setError(err?.message || 'Google sign-in failed.');

@@ -22,6 +22,7 @@ const emptyProduct: Omit<Product, 'id'> = {
   inStock: true,
   features: [],
   ageRange: '',
+  newArrival: false,
 };
 
 function normalizeImageUrl(value: string) {
@@ -360,6 +361,14 @@ export default function AdminProductsPage() {
                 )}
               </div>
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 w-fit"><input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />In Stock</label>
+              <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 w-fit">
+                <input
+                  type="checkbox"
+                  checked={!!form.newArrival}
+                  onChange={(e) => setForm({ ...form, newArrival: e.target.checked })}
+                />
+                Show in New Arrivals
+              </label>
               <div className="sticky bottom-0 bg-white pt-2">
                 <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
                   <button onClick={() => setShowModal(false)} className="px-5 py-2.5 border border-slate-200 rounded-xl hover:bg-slate-50">Cancel</button>

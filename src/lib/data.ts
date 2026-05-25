@@ -13,6 +13,7 @@ export type Product = {
   features?: string[];
   ageRange?: string;
   inStock: boolean;
+  newArrival?: boolean;
 };
 
 export type CartItem = Product & { quantity: number };

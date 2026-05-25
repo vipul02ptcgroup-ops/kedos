@@ -1,14 +1,32 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ShieldCheck } from 'lucide-react';
-import { continueWithGoogle, getUserRole, loginWithEmail } from '@/lib/auth';
+import { completeGoogleRedirectSignIn, continueWithGoogle, getUserRole, loginWithEmail } from '@/lib/auth';
 
 export default function AdminLoginPage() {
   const router = useRouter();
   const [form, setForm] = useState({ email: '', password: '' });
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      try {
+        const user = await completeGoogleRedirectSignIn();
+        if (!active || !user) return;
+        await redirectIfAdmin(user.uid);
+      } catch (err: any) {
+        if (!active) return;
+        setError(err?.message || 'Google sign-in failed.');
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const redirectIfAdmin = async (uid: string) => {
     const role = await getUserRole(uid);
@@ -38,6 +56,7 @@ export default function AdminLoginPage() {
     setError('');
     try {
       const user = await continueWithGoogle();
+      if (!user) return;
       await redirectIfAdmin(user.uid);
     } catch (err: any) {
       setError(err?.message || 'Google sign-in failed.');

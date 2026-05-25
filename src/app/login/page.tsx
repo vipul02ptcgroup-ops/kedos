@@ -1,11 +1,11 @@
 'use client';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Eye, EyeOff, Star, LogIn } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { continueWithGoogle, getUserRole, loginWithEmail } from '@/lib/auth';
+import { completeGoogleRedirectSignIn, continueWithGoogle, getUserRole, loginWithEmail } from '@/lib/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -13,6 +13,24 @@ export default function LoginPage() {
   const [form, setForm] = useState({ email: '', password: '', remember: false });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      try {
+        const user = await completeGoogleRedirectSignIn();
+        if (!active || !user) return;
+        await redirectAfterLogin(user.uid);
+      } catch (err: any) {
+        if (!active) return;
+        setError(err?.message || 'Google sign-in failed.');
+      }
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const redirectAfterLogin = async (uid: string) => {
     const role = await getUserRole(uid);
@@ -38,6 +56,7 @@ export default function LoginPage() {
     setError('');
     try {
       const user = await continueWithGoogle();
+      if (!user) return;
       await redirectAfterLogin(user.uid);
     } catch (err: any) {
       setError(err?.message || 'Google sign-in failed.');

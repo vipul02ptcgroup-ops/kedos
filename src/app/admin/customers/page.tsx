@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Mail, Users, ShieldCheck, UserRound } from 'lucide-react';
+import { Search, Mail, Users, ShieldCheck, UserRound, Phone, CalendarDays, Fingerprint } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { collection, onSnapshot, query } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -147,7 +147,13 @@ export default function AdminCustomersPage() {
                 <tr>
                   {['User', 'Role', 'Phone', 'Joined', 'UID'].map((h) => (
                     <th key={h} className="px-4 py-3.5 text-left text-xs font-medium text-slate-500 font-body uppercase tracking-wide">
-                      {h}
+                      <span className="inline-flex items-center gap-1.5">
+                        {h === 'Role' && <ShieldCheck size={13} />}
+                        {h === 'Phone' && <Phone size={13} />}
+                        {h === 'Joined' && <CalendarDays size={13} />}
+                        {h === 'UID' && <Fingerprint size={13} />}
+                        {h}
+                      </span>
                     </th>
                   ))}
                 </tr>
@@ -168,10 +174,11 @@ export default function AdminCustomersPage() {
                     </td>
                     <td className="px-4 py-4">
                       <span
-                        className={`text-xs px-2.5 py-1 rounded-full font-body font-medium capitalize ${
+                        className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-body font-medium capitalize ${
                           u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
                         }`}
                       >
+                        {u.role === 'admin' ? <ShieldCheck size={12} /> : <UserRound size={12} />}
                         {u.role}
                       </span>
                     </td>
@@ -195,4 +202,3 @@ export default function AdminCustomersPage() {
     </AdminLayout>
   );
 }
-

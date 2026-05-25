@@ -1,6 +1,7 @@
 import type { Metadata } from 'next';
 import './globals.css';
 import JsonLd from '@/components/seo/JsonLd';
+import ScrollToTopOnRouteChange from '@/components/layout/ScrollToTopOnRouteChange';
 import { DEFAULT_DESCRIPTION, organizationSchema, websiteSchema } from '@/lib/seo';
 
 export const metadata: Metadata = {
@@ -35,6 +36,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en">
       <body>
+        <ScrollToTopOnRouteChange />
         <JsonLd data={[websiteSchema(), organizationSchema()]} />
         {children}
       </body>
