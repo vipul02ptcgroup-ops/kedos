@@ -4,25 +4,75 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Settings, Star,
-  Menu, X, Bell, ChevronDown, TrendingUp, LogOut, BarChart2, Tags, Heart
+  Menu, X, Bell, ChevronDown, TrendingUp, LogOut, BarChart2, Tags, Heart, MessageSquare, Mail, MessageCircleMore, Ruler
 } from 'lucide-react';
 import { getUserRole, logoutUser, subscribeAuth } from '@/lib/auth';
+import { doc, getDoc, onSnapshot } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
 
-const NAV = [
-  { label: 'Dashboard', href: '/admin', icon: LayoutDashboard },
-  { label: 'Products', href: '/admin/products', icon: Package },
-  { label: 'Categories', href: '/admin/categories', icon: Tags },
-  { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
-  { label: 'Wishlist', href: '/admin/wishlist', icon: Heart },
-  { label: 'Customers', href: '/admin/customers', icon: Users },
-  { label: 'Analytics', href: '/admin/analytics', icon: BarChart2 },
-  { label: 'Settings', href: '/admin/settings', icon: Settings },
+const NAV_SECTIONS = [
+  {
+    title: 'Overview',
+    items: [{ label: 'Dashboard', href: '/admin', icon: LayoutDashboard }],
+  },
+  {
+    title: 'Catalog',
+    items: [
+      { label: 'Products', href: '/admin/products', icon: Package },
+      { label: 'Categories', href: '/admin/categories', icon: Tags },
+      { label: 'Size Guide', href: '/admin/size-guide', icon: Ruler },
+    ],
+  },
+  {
+    title: 'Sales',
+    items: [
+      { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+      { label: 'Reviews', href: '/admin/reviews', icon: MessageCircleMore },
+      { label: 'Analytics', href: '/admin/analytics', icon: BarChart2 },
+    ],
+  },
+  {
+    title: 'Engagement',
+    items: [
+      { label: 'Subscribers', href: '/admin/subscribers', icon: Mail },
+      { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
+      { label: 'Wishlist', href: '/admin/wishlist', icon: Heart },
+    ],
+  },
+  {
+    title: 'Users',
+    items: [{ label: 'Customers', href: '/admin/customers', icon: Users }],
+  },
+  {
+    title: 'System',
+    items: [{ label: 'Settings', href: '/admin/settings', icon: Settings }],
+  },
 ];
+
+const NAV = NAV_SECTIONS.flatMap((section) => section.items);
+
+const CONTROL_BY_HREF: Record<string, string> = {
+  '/admin': 'dashboard',
+  '/admin/products': 'products',
+  '/admin/categories': 'categories',
+  '/admin/size-guide': 'size_guide',
+  '/admin/orders': 'orders',
+  '/admin/reviews': 'reviews',
+  '/admin/analytics': 'analytics',
+  '/admin/subscribers': 'subscribers',
+  '/admin/messages': 'messages',
+  '/admin/wishlist': 'wishlist',
+  '/admin/customers': 'customers',
+  '/admin/settings': 'settings',
+};
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [authChecked, setAuthChecked] = useState(false);
   const [adminEmail, setAdminEmail] = useState('');
+  const [allowedControls, setAllowedControls] = useState<string[] | null>(null);
+  const [userRole, setUserRole] = useState<'admin' | 'superadmin' | 'customer'>('customer');
+  const [uid, setUid] = useState('');
   const pathname = usePathname();
   const router = useRouter();
 
@@ -34,11 +84,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       }
 
       const role = await getUserRole(user.uid);
-      if (role !== 'admin') {
+      if (role !== 'admin' && role !== 'superadmin') {
         router.replace('/');
         return;
       }
+      setUserRole(role);
+      setUid(user.uid);
 
+      const userSnap = await getDoc(doc(db, 'users', user.uid));
+      const controls = userSnap.exists() ? (userSnap.data() as any)?.adminControls : null;
+      setAllowedControls(Array.isArray(controls) ? controls.map((c: any) => String(c)) : null);
       setAdminEmail(user.email || '');
       setAuthChecked(true);
     });
@@ -46,10 +101,47 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     return () => unsub();
   }, [router]);
 
+  useEffect(() => {
+    if (!db || !uid || userRole !== 'admin') return;
+    const unsub = onSnapshot(doc(db, 'users', uid), (snap) => {
+      const controls = snap.exists() ? (snap.data() as any)?.adminControls : null;
+      setAllowedControls(Array.isArray(controls) ? controls.map((c: any) => String(c)) : []);
+    });
+    return () => unsub();
+  }, [uid, userRole]);
+
   const handleLogout = async () => {
     await logoutUser();
     router.replace('/login');
   };
+
+  const canAccess = (href: string) => {
+    if (userRole === 'superadmin') return true;
+    if (userRole === 'admin') {
+      if (href === '/admin/customers') return true;
+      const control = CONTROL_BY_HREF[href];
+      if (!control) return false;
+      return Array.isArray(allowedControls) && allowedControls.includes(control);
+    }
+    if (href === '/admin') return true;
+    if (!allowedControls || allowedControls.length === 0) return true; // legacy admins: full access
+    const control = CONTROL_BY_HREF[href];
+    if (!control) return true;
+    return allowedControls.includes(control);
+  };
+
+  const visibleSections = NAV_SECTIONS.map((section) => ({
+    ...section,
+    items: section.items.filter((item) => canAccess(item.href)),
+  })).filter((section) => section.items.length > 0);
+
+  useEffect(() => {
+    if (!authChecked) return;
+    const matched = NAV.find((n) => pathname === n.href || (n.href !== '/admin' && pathname.startsWith(n.href)));
+    if (matched && !canAccess(matched.href)) {
+      router.replace('/admin/customers');
+    }
+  }, [pathname, authChecked, router, allowedControls, userRole]);
 
   if (!authChecked) {
     return (
@@ -81,19 +173,32 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
           )}
         </div>
 
-        <nav className="flex-1 px-2 py-4 space-y-1 overflow-y-auto">
-          {NAV.map(item => {
-            const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
-            return (
-              <Link key={item.href} href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors group ${
-                  active ? 'bg-blush-500 text-white' : 'text-cream-200/50 hover:bg-white/10 hover:text-cream-100'
-                }`}>
-                <item.icon size={18} className="shrink-0" />
-                {sidebarOpen && <span className="text-sm font-medium truncate">{item.label}</span>}
-              </Link>
-            );
-          })}
+        <nav className="flex-1 px-2 py-4 overflow-y-auto">
+          <div className="space-y-3">
+            {visibleSections.map((section) => (
+              <div key={section.title}>
+                {sidebarOpen && (
+                  <p className="px-3 pb-1 text-[10px] uppercase tracking-wider text-cream-200/30 font-semibold">
+                    {section.title}
+                  </p>
+                )}
+                <div className="space-y-1">
+                  {section.items.map((item) => {
+                    const active = pathname === item.href || (item.href !== '/admin' && pathname.startsWith(item.href));
+                    return (
+                      <Link key={item.href} href={item.href}
+                        className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors group ${
+                          active ? 'bg-blush-500 text-white' : 'text-cream-200/50 hover:bg-white/10 hover:text-cream-100'
+                        }`}>
+                        <item.icon size={18} className="shrink-0" />
+                        {sidebarOpen && <span className="text-sm font-medium truncate">{item.label}</span>}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
         </nav>
 
         <div className="px-3 py-4 border-t border-white/10">

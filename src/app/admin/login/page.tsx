@@ -30,8 +30,8 @@ export default function AdminLoginPage() {
 
   const redirectIfAdmin = async (uid: string) => {
     const role = await getUserRole(uid);
-    if (role !== 'admin') {
-      setError('Your account is not an admin. Set role=admin in Firestore users collection.');
+    if (role !== 'admin' && role !== 'superadmin') {
+      setError('Your account is not allowed in admin panel. Set role=admin or role=superadmin in Firebase.');
       return;
     }
     router.replace('/admin');

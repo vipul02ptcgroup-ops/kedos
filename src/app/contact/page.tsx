@@ -3,6 +3,8 @@ import { useState } from 'react';
 import { Mail, Phone, MapPin, Clock, Send, MessageCircle, CheckCircle } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import { createContactMessage } from '@/lib/messages';
+import { auth } from '@/lib/firebase';
 
 const FAQS = [
   { q: 'What is your return policy?', a: 'We offer hassle-free returns within 30 days of purchase. Items must be unused and in original packaging.' },
@@ -13,11 +15,23 @@ const FAQS = [
 
 export default function ContactPage() {
   const [submitted, setSubmitted] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
   const [form, setForm] = useState({ name: '', email: '', subject: '', message: '' });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setSubmitted(true);
+    setLoading(true);
+    setError('');
+    try {
+      await createContactMessage({ ...form, userId: auth?.currentUser?.uid || null });
+      setSubmitted(true);
+      setForm({ name: '', email: '', subject: '', message: '' });
+    } catch (err: any) {
+      setError(err?.message || 'Unable to send message. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -84,6 +98,7 @@ export default function ContactPage() {
                 ) : (
                   <>
                     <h2 className="font-display text-2xl text-cocoa-800 mb-6">Send us a message</h2>
+                    {error && <p className="mb-3 text-sm text-red-600 font-body">{error}</p>}
                     <form onSubmit={handleSubmit} className="space-y-5">
                       <div className="grid sm:grid-cols-2 gap-5">
                         <div>
@@ -117,9 +132,9 @@ export default function ContactPage() {
                           rows={5} placeholder="Tell us how we can help..."
                           className="w-full px-4 py-3 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 resize-none text-cocoa-800" />
                       </div>
-                      <button type="submit"
+                      <button type="submit" disabled={loading}
                         className="w-full flex items-center justify-center gap-2 bg-blush-500 hover:bg-blush-600 text-white py-3.5 rounded-full font-medium font-body transition-colors">
-                        <Send size={16} /> Send Message
+                        <Send size={16} /> {loading ? 'Sending...' : 'Send Message'}
                       </button>
                     </form>
                   </>

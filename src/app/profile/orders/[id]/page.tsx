@@ -50,6 +50,7 @@ export default function ProfileOrderDetailsPage() {
   const status = String(order?.status || 'pending');
   const doneIndex = status === 'pending' ? 0 : status === 'processing' ? 1 : status === 'shipped' ? 2 : status === 'delivered' ? 3 : 0;
 
+
   return (
     <>
       <Header />
@@ -75,7 +76,6 @@ export default function ProfileOrderDetailsPage() {
                   <div className="bg-cream-50 rounded-xl p-3"><p className="text-xs text-cocoa-700/50">Total</p><p className="text-sm text-cocoa-800 font-medium">Rs {Number(order.total || 0).toFixed(0)}</p></div>
                   <div className="bg-cream-50 rounded-xl p-3"><p className="text-xs text-cocoa-700/50">Status</p><p className="text-sm text-cocoa-800 font-medium capitalize">{order.status}</p></div>
                 </div>
-
                 <h2 className="font-display text-lg text-cocoa-800 mb-4">Tracking</h2>
                 <div className="flex items-start gap-0 mb-6">
                   {[

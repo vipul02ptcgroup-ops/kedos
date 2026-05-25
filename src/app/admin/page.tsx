@@ -90,7 +90,7 @@ export default function AdminDashboard() {
   const totalRevenue = useMemo(() => orders.reduce((sum, o) => sum + o.total, 0), [orders]);
   const totalOrders = orders.length;
   const avgOrderValue = totalOrders ? totalRevenue / totalOrders : 0;
-  const activeCustomers = users.filter((u) => u.role !== 'admin').length;
+  const activeCustomers = users.filter((u) => u.role !== 'admin' && u.role !== 'superadmin').length;
 
   const categoryStats = useMemo(() => {
     if (products.length === 0) return [] as { name: string; pct: number; val: string; color: string }[];

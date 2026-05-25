@@ -168,6 +168,12 @@ export default function RegisterPage() {
               </form>
 
               <button onClick={onGoogleRegister} disabled={loading} className="w-full mt-4 flex items-center justify-center gap-2 py-2.5 rounded-xl border border-cream-200 text-sm font-body text-cocoa-700 hover:bg-cream-50 transition-colors disabled:opacity-60">
+                <svg aria-hidden="true" viewBox="0 0 24 24" className="h-4 w-4">
+                  <path fill="#EA4335" d="M12 10.2v3.9h5.5c-.2 1.3-1.5 3.9-5.5 3.9-3.3 0-6-2.7-6-6s2.7-6 6-6c1.9 0 3.2.8 3.9 1.5l2.7-2.6C17 3.4 14.7 2.4 12 2.4 6.7 2.4 2.4 6.7 2.4 12S6.7 21.6 12 21.6c6.9 0 9.6-4.8 9.6-7.3 0-.5-.1-.9-.1-1.3H12z" />
+                  <path fill="#34A853" d="M3.6 7.4l3.2 2.3C7.7 7.9 9.7 6 12 6c1.9 0 3.2.8 3.9 1.5l2.7-2.6C17 3.4 14.7 2.4 12 2.4c-3.7 0-6.9 2.1-8.4 5z" />
+                  <path fill="#FBBC05" d="M12 21.6c2.6 0 4.8-.9 6.4-2.5l-3-2.4c-.8.6-1.9 1.1-3.4 1.1-3.9 0-5.3-2.6-5.5-3.9l-3.2 2.4c1.5 3 4.6 5.3 8.7 5.3z" />
+                  <path fill="#4285F4" d="M21.6 12c0-.6-.1-1.1-.2-1.8H12v3.9h5.5c-.3 1.4-1.1 2.5-2.1 3.3l3 2.4c1.8-1.7 3.2-4.1 3.2-7.8z" />
+                </svg>
                 Continue with Google
               </button>
 

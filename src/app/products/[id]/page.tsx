@@ -14,6 +14,17 @@ import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
 import { toSlug } from '@/lib/slug';
+import { createReview, subscribeProductReviews, type ProductReview } from '@/lib/reviews';
+import { subscribeOrdersForUserIdentity, type FirestoreOrder } from '@/lib/orders';
+
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result || ''));
+    reader.onerror = () => reject(new Error('Unable to read selected image.'));
+    reader.readAsDataURL(file);
+  });
+}
 
 export default function ProductDetailPage() {
   const params = useParams();
@@ -32,6 +43,12 @@ export default function ProductDetailPage() {
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
+  const [orders, setOrders] = useState<FirestoreOrder[]>([]);
+  const [reviews, setReviews] = useState<ProductReview[]>([]);
+  const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, content: '', images: [] as string[] });
+  const [reviewSaving, setReviewSaving] = useState(false);
+  const [reviewError, setReviewError] = useState('');
+  const [showReviewForm, setShowReviewForm] = useState(false);
   const galleryImages = useMemo(() => {
     if (!product) return [];
     const images = product.images?.length ? product.images : [product.image];
@@ -60,6 +77,30 @@ export default function ProductDetailPage() {
     const unsub = subscribeUserWishlistProductIds(user?.uid, setWishlistIds);
     return () => unsub();
   }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user) {
+      setOrders([]);
+      return;
+    }
+    const unsub = subscribeOrdersForUserIdentity({ userId: user.uid, email: user.email }, setOrders);
+    return () => unsub();
+  }, [user?.uid, user?.email]);
+
+  useEffect(() => {
+    if (!product?.id) {
+      setReviews([]);
+      return;
+    }
+    const unsub = subscribeProductReviews(product.id, setReviews);
+    return () => unsub();
+  }, [product?.id]);
+
+  useEffect(() => {
+    if (user?.displayName && !reviewForm.name) {
+      setReviewForm((prev) => ({ ...prev, name: user.displayName || '' }));
+    }
+  }, [user?.displayName, reviewForm.name]);
 
   useEffect(() => {
     if (!product) return;
@@ -108,6 +149,48 @@ export default function ProductDetailPage() {
 
   const goToNextImage = () => {
     setActiveImageIndex((current) => (current + 1) % galleryImages.length);
+  };
+
+  const onReviewImagesChange = async (files: FileList | null) => {
+    if (!files?.length) return;
+    const selected = Array.from(files).slice(0, 2 - reviewForm.images.length);
+    if (selected.length <= 0) return;
+    try {
+      const urls = await Promise.all(selected.map((f) => readFileAsDataURL(f)));
+      setReviewForm((prev) => ({ ...prev, images: [...prev.images, ...urls].slice(0, 2) }));
+    } catch (err: any) {
+      setReviewError(err?.message || 'Unable to read selected images.');
+    }
+  };
+
+  const submitReview = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!product?.id) return;
+    setReviewSaving(true);
+    setReviewError('');
+    try {
+      await createReview({
+        productId: product.id,
+        userId: user?.uid || null,
+        userEmail: user?.email || '',
+        name: reviewForm.name,
+        rating: reviewForm.rating,
+        content: reviewForm.content,
+        images: reviewForm.images,
+        orders,
+      });
+      setReviewForm({
+        name: user?.displayName || '',
+        rating: 5,
+        content: '',
+        images: [],
+      });
+      setShowReviewForm(false);
+    } catch (err: any) {
+      setReviewError(err?.message || 'Unable to submit review.');
+    } finally {
+      setReviewSaving(false);
+    }
   };
 
   if (!product) return (
@@ -280,52 +363,146 @@ export default function ProductDetailPage() {
                 ))}
               </div>
 
-              {/* Tabs */}
-              <div className="border-b border-cream-200 flex gap-6 mb-4">
-                {['description', 'features', 'reviews'].map(tab => (
-                  <button key={tab} onClick={() => setActiveTab(tab)}
-                    className={`pb-3 text-sm font-medium font-body capitalize transition-colors border-b-2 -mb-px ${
-                      activeTab === tab ? 'border-blush-500 text-blush-600' : 'border-transparent text-cocoa-700/60 hover:text-cocoa-800'
-                    }`}>
-                    {tab}
-                  </button>
-                ))}
-              </div>
+            </div>
+          </div>
 
-              <div>
-                {activeTab === 'description' && (
-                  <p className="text-sm text-cocoa-700/80 font-body leading-relaxed">{product.description}</p>
-                )}
-                {activeTab === 'features' && normalizedFeatures.length > 0 && (
-                  <ul className="space-y-2">
-                    {normalizedFeatures.map(f => (
-                      <li key={f} className="flex items-center gap-2 text-sm font-body text-cocoa-700/80">
-                        <Check size={15} className="text-sage-500 shrink-0" />
-                        {f}
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {activeTab === 'reviews' && (
-                  <div className="space-y-4">
-                    {[
-                      { name: 'Priya S.', rating: 5, text: 'Amazing quality! My baby loves it.' },
-                      { name: 'Meena R.', rating: 4, text: 'Good product, fast delivery.' },
-                    ].map(r => (
-                      <div key={r.name} className="border-b border-cream-200 pb-4">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-8 h-8 bg-blush-100 rounded-full flex items-center justify-center font-display text-sm text-blush-700">{r.name[0]}</div>
-                          <span className="font-medium text-sm font-body text-cocoa-800">{r.name}</span>
-                          <div className="flex ml-auto">
-                            {Array.from({ length: r.rating }, (_, i) => <Star key={i} size={12} className="fill-amber-400 text-amber-400" />)}
-                          </div>
-                        </div>
-                        <p className="text-sm text-cocoa-700/70 font-body">{r.text}</p>
-                      </div>
-                    ))}
+          <div className="mt-10">
+            <div className="border-b border-cream-200 flex gap-6 mb-4">
+              {['description', 'features', 'reviews'].map(tab => (
+                <button key={tab} onClick={() => setActiveTab(tab)}
+                  className={`pb-3 text-sm font-medium font-body capitalize transition-colors border-b-2 -mb-px ${
+                    activeTab === tab ? 'border-blush-500 text-blush-600' : 'border-transparent text-cocoa-700/60 hover:text-cocoa-800'
+                  }`}>
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <div>
+              {activeTab === 'description' && (
+                <p className="text-sm text-cocoa-700/80 font-body leading-relaxed">{product.description}</p>
+              )}
+              {activeTab === 'features' && normalizedFeatures.length > 0 && (
+                <ul className="space-y-2">
+                  {normalizedFeatures.map(f => (
+                    <li key={f} className="flex items-center gap-2 text-sm font-body text-cocoa-700/80">
+                      <Check size={15} className="text-sage-500 shrink-0" />
+                      {f}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {activeTab === 'reviews' && (
+                <div className="space-y-4">
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => setShowReviewForm((prev) => !prev)}
+                      className="px-5 py-2.5 rounded-full bg-blush-500 text-white text-sm font-body"
+                    >
+                      {showReviewForm ? 'Close Review Form' : 'Write a Review'}
+                    </button>
                   </div>
-                )}
-              </div>
+
+                  {showReviewForm && (
+                    <form onSubmit={submitReview} className="rounded-2xl border border-cream-200 p-4 bg-cream-50">
+                      <h3 className="font-display text-lg text-cocoa-800 mb-3">Write a Review</h3>
+                      <div className="grid sm:grid-cols-2 gap-3 mb-3">
+                        <input
+                          value={reviewForm.name}
+                          onChange={(e) => setReviewForm((prev) => ({ ...prev, name: e.target.value }))}
+                          placeholder="Your name"
+                          className="px-3 py-2.5 rounded-xl border border-cream-200 text-sm bg-white"
+                          required
+                        />
+                        <div className="flex items-center gap-1 px-3 py-2.5 rounded-xl border border-cream-200 text-sm bg-white">
+                          {Array.from({ length: 5 }, (_, i) => {
+                            const star = i + 1;
+                            return (
+                              <button
+                                key={star}
+                                type="button"
+                                onClick={() => setReviewForm((prev) => ({ ...prev, rating: star }))}
+                                className="p-0.5"
+                                aria-label={`Rate ${star} star${star > 1 ? 's' : ''}`}
+                              >
+                                <Star
+                                  size={18}
+                                  className={star <= reviewForm.rating ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'}
+                                />
+                              </button>
+                            );
+                          })}
+                          <span className="ml-2 text-xs text-cocoa-700/70 font-body">{reviewForm.rating}/5</span>
+                        </div>
+                      </div>
+                      <textarea
+                        value={reviewForm.content}
+                        onChange={(e) => setReviewForm((prev) => ({ ...prev, content: e.target.value }))}
+                        rows={4}
+                        placeholder="Share your experience..."
+                        className="w-full px-3 py-2.5 rounded-xl border border-cream-200 text-sm bg-white resize-none mb-3"
+                        required
+                      />
+                      <div className="flex items-center gap-3 mb-3">
+                        <input type="file" accept="image/*" multiple onChange={(e) => onReviewImagesChange(e.target.files)} />
+                        <span className="text-xs text-cocoa-700/60 font-body">Up to 2 images</span>
+                      </div>
+                      {!!reviewForm.images.length && (
+                        <div className="flex gap-2 mb-3">
+                          {reviewForm.images.map((img) => (
+                            <div key={img} className="relative">
+                              <img src={img} alt="" className="w-16 h-16 rounded-lg object-cover border border-cream-200" />
+                              <button
+                                type="button"
+                                onClick={() => setReviewForm((prev) => ({ ...prev, images: prev.images.filter((x) => x !== img) }))}
+                                className="absolute -top-2 -right-2 w-5 h-5 rounded-full bg-white border border-cream-300 text-xs"
+                              >
+                                ×
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      {reviewError && <p className="text-xs text-red-600 font-body mb-2">{reviewError}</p>}
+                      <button disabled={reviewSaving} className="px-5 py-2.5 rounded-full bg-blush-500 text-white text-sm font-body disabled:opacity-60">
+                        {reviewSaving ? 'Submitting...' : 'Submit Review'}
+                      </button>
+                    </form>
+                  )}
+
+                  {reviews.length > 0 && (
+                    <div className="grid sm:grid-cols-2 gap-4">
+                      {reviews.map((r) => (
+                        <div key={r.id} className="rounded-2xl border border-cream-200 bg-white p-4">
+                          <div className="flex items-center gap-2 mb-2">
+                            <div className="w-9 h-9 bg-blush-100 rounded-full flex items-center justify-center font-display text-sm text-blush-700">
+                              {(r.name || 'U')[0]}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-medium text-sm font-body text-cocoa-800 truncate">{r.name}</p>
+                              <div className="flex">
+                                {Array.from({ length: 5 }, (_, i) => (
+                                  <Star key={i} size={12} className={i < r.rating ? 'fill-amber-400 text-amber-400' : 'fill-gray-200 text-gray-200'} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                          <p className="text-sm text-cocoa-700/80 font-body leading-relaxed">{r.content}</p>
+                          {!!r.images?.length && (
+                            <div className="flex gap-2 mt-3">
+                              {r.images.map((img) => (
+                                <img key={img} src={img} alt="" className="w-16 h-16 rounded-lg object-cover border border-cream-200" />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {reviews.length === 0 && <p className="text-sm text-cocoa-700/60 font-body">No reviews yet. Be the first to review.</p>}
+                </div>
+              )}
             </div>
           </div>
 

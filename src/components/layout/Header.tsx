@@ -31,7 +31,7 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
       setIsLoggedIn(true);
       try {
         const role = await getUserRole(user.uid);
-        setIsAdmin(role === 'admin');
+        setIsAdmin(role === 'admin' || role === 'superadmin');
       } catch {
         setIsAdmin(false);
       }

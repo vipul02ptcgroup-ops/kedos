@@ -13,7 +13,7 @@ import {
 import { doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { auth, db, firebaseClientInitError } from '@/lib/firebase';
 
-export type UserRole = 'customer' | 'admin';
+export type UserRole = 'customer' | 'admin' | 'superadmin';
 export type UserProfile = {
   uid: string;
   email: string;
@@ -21,6 +21,13 @@ export type UserProfile = {
   phone: string;
   role: UserRole;
 };
+
+function parseUserRole(role: unknown): UserRole {
+  const value = String(role || '').toLowerCase();
+  if (value === 'superadmin') return 'superadmin';
+  if (value === 'admin') return 'admin';
+  return 'customer';
+}
 
 type UpsertUserParams = {
   user: User;
@@ -56,7 +63,7 @@ async function upsertUserProfile({ user, name, phone }: UpsertUserParams) {
   assertFirebaseReady();
   const userRef = doc(db, 'users', user.uid);
   const snap = await withTimeout(getDoc(userRef), 10000);
-  const existingRole = (snap.exists() ? snap.data().role : null) as UserRole | null;
+  const existingRole = parseUserRole(snap.exists() ? snap.data().role : null);
 
   await withTimeout(
     setDoc(
@@ -224,7 +231,7 @@ export async function getUserRole(uid: string): Promise<UserRole> {
   const userRef = doc(db, 'users', uid);
   const snap = await getDoc(userRef);
   if (!snap.exists()) return 'customer';
-  return (snap.data().role as UserRole) || 'customer';
+  return parseUserRole(snap.data().role);
 }
 
 export async function getUserProfile(uid: string): Promise<UserProfile | null> {
@@ -238,7 +245,7 @@ export async function getUserProfile(uid: string): Promise<UserProfile | null> {
     email: String(data.email || ''),
     name: String(data.name || ''),
     phone: String(data.phone || ''),
-    role: (data.role as UserRole) || 'customer',
+    role: parseUserRole(data.role),
   };
 }
 

@@ -1,10 +1,10 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Mail, Users, ShieldCheck, UserRound, Phone, CalendarDays, Fingerprint } from 'lucide-react';
+import { Search, Mail, Users, ShieldCheck, UserRound, Phone, CalendarDays, Fingerprint, Settings } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { collection, doc, onSnapshot, query, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
-import { UserRole } from '@/lib/auth';
+import { UserRole, getUserRole, subscribeAuth } from '@/lib/auth';
 
 type AdminUserRow = {
   id: string;
@@ -13,8 +13,23 @@ type AdminUserRow = {
   email: string;
   phone: string;
   role: UserRole;
+  adminControls?: string[];
   createdAt?: any;
 };
+
+const AVAILABLE_CONTROLS = [
+  { key: 'products', label: 'Products' },
+  { key: 'categories', label: 'Categories' },
+  { key: 'size_guide', label: 'Size Guide' },
+  { key: 'orders', label: 'Orders' },
+  { key: 'reviews', label: 'Reviews' },
+  { key: 'analytics', label: 'Analytics' },
+  { key: 'subscribers', label: 'Subscribers' },
+  { key: 'messages', label: 'Messages' },
+  { key: 'wishlist', label: 'Wishlist' },
+  { key: 'customers', label: 'Customers' },
+  { key: 'settings', label: 'Settings' },
+];
 
 function formatJoined(createdAt: any): string {
   const date = createdAt?.toDate?.();
@@ -26,6 +41,10 @@ export default function AdminCustomersPage() {
   const [search, setSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<'all' | UserRole>('all');
   const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [selectedUser, setSelectedUser] = useState<AdminUserRow | null>(null);
+  const [controlsForm, setControlsForm] = useState<string[]>([]);
+  const [savingControls, setSavingControls] = useState(false);
+  const [viewerRole, setViewerRole] = useState<UserRole>('customer');
 
   useEffect(() => {
     if (!db) return;
@@ -33,7 +52,9 @@ export default function AdminCustomersPage() {
     const unsub = onSnapshot(q, (snap) => {
       const rows: AdminUserRow[] = snap.docs.map((d) => {
         const data: any = d.data() || {};
-        const role: UserRole = data?.role === 'admin' ? 'admin' : 'customer';
+        const roleValue = String(data?.role || '').toLowerCase();
+        const role: UserRole =
+          roleValue === 'superadmin' ? 'superadmin' : roleValue === 'admin' ? 'admin' : 'customer';
         return {
           id: d.id,
           uid: String(data?.uid || d.id),
@@ -41,10 +62,23 @@ export default function AdminCustomersPage() {
           email: String(data?.email || '').trim(),
           phone: String(data?.phone || '').trim(),
           role,
+          adminControls: Array.isArray(data?.adminControls) ? data.adminControls.map((x: any) => String(x)) : [],
           createdAt: data?.createdAt,
         };
       });
       setUsers(rows);
+    });
+    return () => unsub();
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeAuth(async (user) => {
+      if (!user) {
+        setViewerRole('customer');
+        return;
+      }
+      const role = await getUserRole(user.uid);
+      setViewerRole(role);
     });
     return () => unsub();
   }, []);
@@ -69,8 +103,29 @@ export default function AdminCustomersPage() {
       });
   }, [users, roleFilter, search]);
 
-  const totalAdmins = users.filter((u) => u.role === 'admin').length;
+  const totalAdmins = users.filter((u) => u.role === 'admin' || u.role === 'superadmin').length;
   const totalCustomers = users.filter((u) => u.role === 'customer').length;
+
+  const updateUserRole = async (userId: string, role: UserRole) => {
+    await updateDoc(doc(db, 'users', userId), { role });
+  };
+
+  const openControls = (u: AdminUserRow) => {
+    setSelectedUser(u);
+    setControlsForm(Array.isArray(u.adminControls) ? u.adminControls : []);
+  };
+
+  const saveControls = async () => {
+    if (!selectedUser) return;
+    setSavingControls(true);
+    try {
+      await updateDoc(doc(db, 'users', selectedUser.id), { adminControls: controlsForm });
+      setSelectedUser(null);
+      setControlsForm([]);
+    } finally {
+      setSavingControls(false);
+    }
+  };
 
   return (
     <AdminLayout>
@@ -126,7 +181,7 @@ export default function AdminCustomersPage() {
             />
           </div>
           <div className="flex gap-2">
-            {(['all', 'admin', 'customer'] as const).map((f) => (
+            {(['all', 'superadmin', 'admin', 'customer'] as const).map((f) => (
               <button
                 key={f}
                 onClick={() => setRoleFilter(f)}
@@ -145,7 +200,7 @@ export default function AdminCustomersPage() {
             <table className="w-full">
               <thead className="bg-slate-50 border-b border-slate-100">
                 <tr>
-                  {['User', 'Role', 'Phone', 'Joined', 'UID'].map((h) => (
+                  {['User', 'Role', 'Phone', 'Joined', 'UID', 'Actions'].map((h) => (
                     <th key={h} className="px-4 py-3.5 text-left text-xs font-medium text-slate-500 font-body uppercase tracking-wide">
                       <span className="inline-flex items-center gap-1.5">
                         {h === 'Role' && <ShieldCheck size={13} />}
@@ -175,21 +230,54 @@ export default function AdminCustomersPage() {
                     <td className="px-4 py-4">
                       <span
                         className={`inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-body font-medium capitalize ${
-                          u.role === 'admin' ? 'bg-purple-100 text-purple-700' : 'bg-green-100 text-green-700'
+                          u.role === 'superadmin'
+                            ? 'bg-rose-100 text-rose-700'
+                            : u.role === 'admin'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-green-100 text-green-700'
                         }`}
                       >
-                        {u.role === 'admin' ? <ShieldCheck size={12} /> : <UserRound size={12} />}
+                        {u.role === 'customer' ? <UserRound size={12} /> : <ShieldCheck size={12} />}
                         {u.role}
                       </span>
                     </td>
                     <td className="px-4 py-4 text-sm text-slate-600 font-body">{u.phone || '-'}</td>
                     <td className="px-4 py-4 text-sm text-slate-600 font-body">{formatJoined(u.createdAt)}</td>
                     <td className="px-4 py-4 text-xs text-slate-500 font-mono">{u.uid}</td>
+                    <td className="px-4 py-4">
+                      {viewerRole === 'superadmin' ? (
+                        <div className="flex gap-2">
+                          {u.role === 'customer' ? (
+                            <button onClick={() => updateUserRole(u.id, 'admin')} className="px-3 py-1.5 rounded-lg bg-purple-100 text-purple-700 text-xs font-medium">
+                              Make Admin
+                            </button>
+                          ) : (
+                            <>
+                              {u.role !== 'superadmin' && (
+                                <button onClick={() => updateUserRole(u.id, 'customer')} className="px-3 py-1.5 rounded-lg bg-slate-100 text-slate-700 text-xs font-medium">
+                                  Make Customer
+                                </button>
+                              )}
+                              {u.role === 'admin' && (
+                                <button onClick={() => openControls(u)} className="px-3 py-1.5 rounded-lg bg-blush-100 text-blush-700 text-xs font-medium inline-flex items-center gap-1">
+                                  <Settings size={12} /> Controls
+                                </button>
+                              )}
+                              {u.role === 'superadmin' && (
+                                <span className="text-xs text-slate-400 font-body">Set via Firebase only</span>
+                              )}
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-slate-400 font-body">View only</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={5} className="px-4 py-10 text-center text-sm text-slate-500 font-body">
+                    <td colSpan={6} className="px-4 py-10 text-center text-sm text-slate-500 font-body">
                       No users found.
                     </td>
                   </tr>
@@ -199,6 +287,41 @@ export default function AdminCustomersPage() {
           </div>
         </div>
       </div>
+
+      {selectedUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setSelectedUser(null)}>
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-xl p-6" onClick={(e) => e.stopPropagation()}>
+            <h3 className="font-display text-xl text-slate-800 mb-1">Admin Controls</h3>
+            <p className="text-sm text-slate-500 mb-4">{selectedUser.name || selectedUser.email}</p>
+            <div className="grid sm:grid-cols-2 gap-2 mb-5">
+              {AVAILABLE_CONTROLS.map((c) => {
+                const checked = controlsForm.includes(c.key);
+                return (
+                  <label key={c.key} className="flex items-center gap-2 px-3 py-2 rounded-lg border border-slate-200 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) =>
+                        setControlsForm((prev) =>
+                          e.target.checked ? [...prev, c.key] : prev.filter((x) => x !== c.key)
+                        )
+                      }
+                      className="accent-blush-500"
+                    />
+                    {c.label}
+                  </label>
+                );
+              })}
+            </div>
+            <div className="flex gap-2">
+              <button onClick={() => setSelectedUser(null)} className="flex-1 py-2.5 rounded-xl border border-slate-200 text-sm">Cancel</button>
+              <button onClick={saveControls} disabled={savingControls} className="flex-1 py-2.5 rounded-xl bg-blush-500 text-white text-sm disabled:bg-blush-300">
+                {savingControls ? 'Saving...' : 'Save Controls'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </AdminLayout>
   );
 }

@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Heart, MapPin, LogOut, ChevronRight, Package, Star, Edit3 } from 'lucide-react';
+import { ShoppingBag, Heart, MapPin, LogOut, ChevronRight, Package, Star, Edit3, MessageSquare, Eye } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { getUserProfile, logoutUser, subscribeAuth, updateUserSettings } from '@/lib/auth';
@@ -19,8 +19,9 @@ import {
   subscribeUserAddresses,
   updateUserAddress,
 } from '@/lib/addresses';
+import { subscribeUserContactMessages, type ContactMessage } from '@/lib/messages';
 
-const TABS = ['Overview', 'Orders', 'Wishlist', 'Addresses', 'Settings'];
+const TABS = ['Overview', 'Orders', 'Messages', 'Wishlist', 'Addresses', 'Settings'];
 const STATUS_COLORS: Record<string, string> = {
   delivered: 'bg-sage-100 text-sage-700',
   shipped: 'bg-sky-100 text-sky-700',
@@ -63,6 +64,8 @@ export default function ProfilePage() {
   const [settingsMessage, setSettingsMessage] = useState('');
   const [settingsError, setSettingsError] = useState('');
   const [isSigningOut, setIsSigningOut] = useState(false);
+  const [messages, setMessages] = useState<ContactMessage[]>([]);
+  const [selectedMessage, setSelectedMessage] = useState<ContactMessage | null>(null);
 
   const fullName = (profileName || user?.displayName || 'Customer').trim();
   const userEmail = user?.email || '';
@@ -112,10 +115,15 @@ export default function ProfilePage() {
       { userId: user.uid, email: user.email },
       setOrders
     );
+    const unsubMessages = subscribeUserContactMessages(
+      { userId: user.uid, email: user.email },
+      setMessages
+    );
     const unsubWishlist = subscribeUserWishlistProductIds(user.uid, setWishlistIds);
     const unsubAddresses = subscribeUserAddresses(user.uid, setAddresses);
     return () => {
       unsubOrders();
+      unsubMessages();
       unsubWishlist();
       unsubAddresses();
     };
@@ -376,7 +384,7 @@ export default function ProfilePage() {
               {userPhone && <p className="text-cream-200/50 font-body text-xs mt-0.5">{userPhone}</p>}
             </div>
             <div className="sm:ml-auto flex gap-4 text-center sm:pb-2">
-              {[[String(totalOrders), 'Orders'], [String(wishlistProducts.length), 'Wishlist'], [String(addresses.length), 'Addresses']].map(([val, lbl]) => (
+              {[[String(totalOrders), 'Orders'], [String(messages.length), 'Messages'], [String(wishlistProducts.length), 'Wishlist'], [String(addresses.length), 'Addresses']].map(([val, lbl]) => (
                 <div key={lbl}>
                   <div className="font-display text-xl text-cream-100">{val}</div>
                   <div className="text-xs text-cream-200/50 font-body">{lbl}</div>
@@ -470,6 +478,52 @@ export default function ProfilePage() {
                   ))}
                 </div>
               )}
+            </div>
+          )}
+
+          {activeTab === 'Messages' && (
+            <div className="bg-white rounded-2xl shadow-sm mb-6 overflow-hidden">
+              <div className="flex items-center justify-between p-6 border-b border-cream-200">
+                <h2 className="font-display text-lg text-cocoa-800">Your Messages</h2>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-cream-50">
+                    <tr>
+                      {['Subject', 'Message', 'Status', 'Reply', 'Date', ''].map((h) => (
+                        <th key={h} className="px-6 py-3 text-left text-xs font-medium text-cocoa-700/60 font-body uppercase tracking-wide">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-cream-100">
+                    {messages.map((m) => (
+                      <tr key={m.id} className="hover:bg-cream-50 transition-colors">
+                        <td className="px-6 py-4 text-sm text-cocoa-800">{m.subject || '-'}</td>
+                        <td className="px-6 py-4 text-sm text-cocoa-700/70 max-w-sm truncate">{m.message}</td>
+                        <td className="px-6 py-4 text-sm capitalize text-cocoa-700">{m.status}</td>
+                        <td className="px-6 py-4 text-sm">
+                          {m.hasReply ? (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-sage-100 text-sage-700">Replied</span>
+                          ) : (
+                            <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">Pending</span>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-sm text-cocoa-700/60">{m.createdAt?.toDate?.().toLocaleDateString('en-IN') || '-'}</td>
+                        <td className="px-6 py-4 text-right">
+                          <button onClick={() => setSelectedMessage(m)} className="inline-flex items-center gap-1 text-xs text-blush-500 hover:text-blush-600 font-body">
+                            <Eye size={13} /> Details
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                    {messages.length === 0 && (
+                      <tr>
+                        <td colSpan={6} className="px-6 py-8 text-center text-sm text-cocoa-700/60 font-body">No messages yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
 
@@ -587,6 +641,26 @@ export default function ProfilePage() {
           )}
         </div>
       </main>
+      {selectedMessage && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center px-4" style={{ background: 'rgba(0,0,0,0.45)' }} onClick={() => setSelectedMessage(null)}>
+          <div className="bg-white rounded-2xl shadow-xl max-w-xl w-full p-6" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-display text-xl text-cocoa-800 flex items-center gap-2"><MessageSquare size={18} /> Message Details</h3>
+              <button onClick={() => setSelectedMessage(null)} className="text-cocoa-700/50 hover:text-cocoa-800">×</button>
+            </div>
+            <div className="space-y-3 text-sm font-body">
+              <p><span className="text-cocoa-700/60">Subject:</span> <span className="text-cocoa-800">{selectedMessage.subject || '-'}</span></p>
+              <p><span className="text-cocoa-700/60">Your Message:</span> <span className="text-cocoa-800">{selectedMessage.message}</span></p>
+              <p><span className="text-cocoa-700/60">Status:</span> <span className="capitalize text-cocoa-800">{selectedMessage.status}</span></p>
+              <div className="rounded-xl bg-cream-50 p-4">
+                <p className="text-cocoa-700/60 mb-1">Admin Reply:</p>
+                <p className="text-cocoa-800">{selectedMessage.adminReply?.trim() ? selectedMessage.adminReply : 'No reply yet.'}</p>
+              </div>
+            </div>
+            <button onClick={() => setSelectedMessage(null)} className="mt-5 w-full py-2.5 rounded-xl bg-blush-500 text-white text-sm font-body">Close</button>
+          </div>
+        </div>
+      )}
       <Footer />
     </>
   );

@@ -3,9 +3,10 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
+    "prepare:next-dir": "node scripts/prepare-next-dir.cjs",
+    "dev": "npm run prepare:next-dir && npm exec next dev",
+    "build": "npm run prepare:next-dir && npm exec next build",
+    "start": "npm run prepare:next-dir && npm exec next start",
     "lint": "next lint",
     "firebase:deploy": "firebase deploy --project kedos-ff9c7 --only firestore,storage",
     "firebase:deploy:rules": "firebase deploy --project kedos-ff9c7 --only firestore:rules,firestore:indexes,storage"
@@ -14,6 +15,7 @@
     "clsx": "^2.1.1",
     "firebase": "^12.13.0",
     "firebase-admin": "^13.10.0",
+    "jspdf": "^4.2.0",
     "lucide-react": "^0.383.0",
     "next": "14.2.5",
     "react": "^18",
