@@ -1,11 +1,10 @@
 'use client';
 
 import { useEffect, useRef } from 'react';
-import { usePathname, useSearchParams } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 
 export default function ScrollToTopOnRouteChange() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
   const isFirstRender = useRef(true);
 
   useEffect(() => {
@@ -20,7 +19,7 @@ export default function ScrollToTopOnRouteChange() {
       left: 0,
       behavior: prefersReducedMotion ? 'auto' : 'smooth',
     });
-  }, [pathname, searchParams]);
+  }, [pathname]);
 
   return null;
 }
