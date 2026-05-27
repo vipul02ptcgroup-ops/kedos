@@ -9,6 +9,7 @@ import {
   type OrderItem,
   type OrderStatus,
 } from '@/lib/orders';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 const STATUS_COLORS: Record<string, string> = {
   delivered: 'bg-green-100 text-green-700',
@@ -38,6 +39,8 @@ type UiOrder = {
   shipping: number;
   discount: number;
   total: number;
+  couponCode?: string;
+  couponTitle?: string;
   status: OrderStatus;
 };
 
@@ -61,6 +64,8 @@ function toUiOrder(order: FirestoreOrder): UiOrder {
     shipping: Number(order.shipping || 0),
     discount: Number(order.discount || 0),
     total: Number(order.total || 0),
+    couponCode: String((order as any).couponCode || ''),
+    couponTitle: String((order as any).couponTitle || ''),
     status: (String(order.status || 'pending').toLowerCase() as OrderStatus),
   };
 }
@@ -159,9 +164,16 @@ export default function AdminOrdersPage() {
 
   const handleStatusChange = async (orderId: string, nextStatus: OrderStatus) => {
     const prev = orders;
+    const before = orders.find((o) => o.id === orderId)?.status || 'pending';
     setOrders((curr) => curr.map((o) => (o.id === orderId ? { ...o, status: nextStatus } : o)));
     try {
       await updateOrderStatus(orderId, nextStatus);
+      await createAdminLog({
+        action: 'order_status_changed',
+        ...getAdminActorSnapshot(),
+        targetUid: orderId,
+        details: `${before} -> ${nextStatus}`,
+      });
     } catch {
       setOrders(prev);
     }
@@ -171,7 +183,14 @@ export default function AdminOrdersPage() {
     if (!detailOrder) return;
     setStatusSaving(true);
     try {
+      const before = orders.find((o) => o.id === detailOrder.id)?.status || 'pending';
       await updateOrderStatus(detailOrder.id, detailOrder.status);
+      await createAdminLog({
+        action: 'order_status_changed',
+        ...getAdminActorSnapshot(),
+        targetUid: detailOrder.id,
+        details: `${before} -> ${detailOrder.status} (detail panel)`,
+      });
       setDetailOrder(null);
     } finally {
       setStatusSaving(false);
@@ -286,6 +305,10 @@ export default function AdminOrdersPage() {
       doc.text(formatInvoiceCurrency(order.shipping), 545, y + 36, { align: 'right' });
       doc.text('Discount', 372, y + 54);
       doc.text(`- ${formatInvoiceCurrency(order.discount)}`, 545, y + 54, { align: 'right' });
+      if (order.couponCode) {
+        doc.text('Coupon', 372, y + 70);
+        doc.text(order.couponCode, 545, y + 70, { align: 'right' });
+      }
 
       doc.setFillColor(249, 250, 251);
       doc.roundedRect(360, y + 84, 195, 34, 8, 8, 'F');
@@ -299,6 +322,12 @@ export default function AdminOrdersPage() {
       doc.setTextColor(110);
       doc.text(`System generated invoice for order ${orderCode}.`, 40, 815);
       doc.save(`${safeOrderCode}.pdf`);
+      await createAdminLog({
+        action: 'order_invoice_downloaded',
+        ...getAdminActorSnapshot(),
+        targetUid: order.id,
+        details: `Invoice downloaded for ${order.orderCode}`,
+      });
     } catch (err) {
       console.error(err);
       window.alert('Unable to generate PDF right now. Please try again.');
@@ -450,6 +479,7 @@ export default function AdminOrdersPage() {
                   ['Email', detailOrder.email],
                   ['Date', detailOrder.date],
                   ['Items', `${detailOrder.items} items`],
+                  ['Coupon', detailOrder.couponCode || '-'],
                   ['Total', formatINR(detailOrder.total)],
                 ].map(([k, v]) => (
                   <div key={k} className="flex justify-between text-sm font-body">

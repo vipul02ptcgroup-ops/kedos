@@ -1,17 +1,23 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
 import { ArrowRight, Shield, Leaf, Truck, Heart, Star, ChevronRight, Baby, Shirt, Puzzle, Bed, Backpack, Moon, Bath, Milk, Tag } from 'lucide-react';
-import { CartItem, Product } from '@/lib/data';
+import { Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import CartDrawer from '@/components/cart/CartDrawer';
 import { useEffect, useMemo, useState } from 'react';
 import { subscribeProducts } from '@/lib/products';
 import { CategoryDoc, subscribeCategoryDocs } from '@/lib/categories';
 import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
+import { useCart } from '@/lib/cart';
+import { trackCartInterest } from '@/lib/cartInterest';
+
+const CartDrawer = dynamic(() => import('@/components/cart/CartDrawer'));
+const BELOW_FOLD_STYLE = { contentVisibility: 'auto', containIntrinsicSize: '1px 1000px' } as const;
 
 const FEATURES = [
   { icon: Shield, title: 'Safety Certified', desc: 'Every product meets the highest safety standards' },
@@ -28,7 +34,7 @@ const TESTIMONIALS = [
 
 export default function HomePage() {
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const { items: cartItems, cartCount, addProduct, removeItem, updateQuantity } = useCart();
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<CategoryDoc[]>([]);
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -57,15 +63,10 @@ export default function HomePage() {
   const addToCart = (productId: string) => {
     const product = products.find((p) => p.id === productId);
     if (!product) return;
-    setCartItems((prev) => {
-      const existing = prev.find((i) => i.id === productId);
-      if (existing) return prev.map((i) => (i.id === productId ? { ...i, quantity: i.quantity + 1 } : i));
-      return [...prev, { ...product, quantity: 1 }];
-    });
+    addProduct(product, 1);
+    void trackCartInterest(user, productId, 1);
     setCartOpen(true);
   };
-
-  const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
   const iconByName: Record<string, typeof Tag> = {
     shirt: Shirt,
     puzzle: Puzzle,
@@ -149,7 +150,14 @@ export default function HomePage() {
             <div className="relative hidden lg:block animate-fade-up delay-200">
               <div className="relative w-full aspect-square max-w-lg mx-auto">
                 <div className="absolute inset-0 bg-blush-200/40 rounded-[40px] rotate-6" />
-                <img src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?w=600&q=80" alt="Happy baby" className="relative rounded-[32px] w-full h-full object-cover shadow-2xl" />
+                <Image
+                  src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?w=600&q=80"
+                  alt="Happy baby"
+                  fill
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  className="relative rounded-[32px] w-full h-full object-cover shadow-2xl"
+                />
                 <div className="absolute -bottom-6 -left-8 bg-white rounded-2xl shadow-xl p-4 flex items-center gap-3">
                   <div className="w-12 h-12 bg-sage-100 rounded-xl flex items-center justify-center">
                     <Leaf size={22} className="text-sage-600" />
@@ -171,7 +179,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-16 bg-white">
+        <section className="py-16 bg-white" style={BELOW_FOLD_STYLE}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between mb-10">
               <div>
@@ -204,7 +212,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-16 bg-cream-50">
+        <section className="py-16 bg-cream-50" style={BELOW_FOLD_STYLE}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between mb-10">
               <div>
@@ -223,7 +231,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-16 bg-cocoa-800">
+        <section className="py-16 bg-cocoa-800" style={BELOW_FOLD_STYLE}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-8">
               {FEATURES.map((f) => (
@@ -239,7 +247,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-16 bg-white">
+        <section className="py-16 bg-white" style={BELOW_FOLD_STYLE}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <div className="flex items-end justify-between mb-10">
               <div>
@@ -255,7 +263,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-20 bg-gradient-to-r from-blush-400/30 via-cream-100 to-sage-400/20">
+        <section className="py-20 bg-gradient-to-r from-blush-400/30 via-cream-100 to-sage-400/20" style={BELOW_FOLD_STYLE}>
           <div className="max-w-4xl mx-auto px-4 text-center">
             <Baby size={48} className="text-blush-500 mx-auto mb-6 animate-bounce-soft" />
             <h2 className="font-display text-4xl lg:text-5xl text-cocoa-800 mb-4">
@@ -270,7 +278,7 @@ export default function HomePage() {
           </div>
         </section>
 
-        <section className="py-16 bg-cream-50">
+        <section className="py-16 bg-cream-50" style={BELOW_FOLD_STYLE}>
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
             <h2 className="font-display text-3xl lg:text-4xl text-cocoa-800 text-center mb-12">What Parents Say</h2>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -302,11 +310,8 @@ export default function HomePage() {
         open={cartOpen}
         onClose={() => setCartOpen(false)}
         items={cartItems}
-        onRemove={(id) => setCartItems((prev) => prev.filter((i) => i.id !== id))}
-        onUpdateQty={(id, qty) => {
-          if (qty < 1) setCartItems((prev) => prev.filter((i) => i.id !== id));
-          else setCartItems((prev) => prev.map((i) => (i.id === id ? { ...i, quantity: qty } : i)));
-        }}
+        onRemove={removeItem}
+        onUpdateQty={updateQuantity}
       />
     </>
   );

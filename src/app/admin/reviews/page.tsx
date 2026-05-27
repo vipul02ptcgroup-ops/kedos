@@ -5,6 +5,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { deleteReview, subscribeAllReviews, type ProductReview } from '@/lib/reviews';
 import { subscribeProducts } from '@/lib/products';
 import type { Product } from '@/lib/data';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 export default function AdminReviewsPage() {
   const [rows, setRows] = useState<ProductReview[]>([]);
@@ -32,6 +33,13 @@ export default function AdminReviewsPage() {
   const onDelete = async (row: ProductReview) => {
     if (!window.confirm('Delete this review?')) return;
     await deleteReview(row.id, row.productId);
+    await createAdminLog({
+      action: 'review_deleted',
+      ...getAdminActorSnapshot(),
+      targetUid: row.id,
+      targetEmail: row.userEmail || '',
+      details: `product=${row.productId}, rating=${row.rating}`,
+    });
   };
 
   const productNameById = useMemo(() => {

@@ -9,6 +9,7 @@ import {
   type ContactMessage,
   type ContactMessageStatus,
 } from '@/lib/messages';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 export default function AdminMessagesPage() {
   const [rows, setRows] = useState<ContactMessage[]>([]);
@@ -44,6 +45,13 @@ export default function AdminMessagesPage() {
     setSaving(true);
     try {
       await replyToContactMessage(detail.id, { reply, status });
+      await createAdminLog({
+        action: 'message_replied',
+        ...getAdminActorSnapshot(),
+        targetUid: detail.id,
+        targetEmail: detail.email,
+        details: `status=${status}`,
+      });
       setDetail(null);
       setReply('');
     } finally {
@@ -53,7 +61,15 @@ export default function AdminMessagesPage() {
 
   const onDelete = async (id: string) => {
     if (!window.confirm('Delete this message?')) return;
+    const row = rows.find((r) => r.id === id);
     await deleteContactMessage(id);
+    await createAdminLog({
+      action: 'message_deleted',
+      ...getAdminActorSnapshot(),
+      targetUid: id,
+      targetEmail: row?.email || '',
+      details: row?.subject || '',
+    });
   };
 
   return (
@@ -181,4 +197,3 @@ export default function AdminMessagesPage() {
     </AdminLayout>
   );
 }
-

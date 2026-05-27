@@ -1,7 +1,9 @@
 'use client';
 import Link from 'next/link';
+import { useEffect, useState } from 'react';
 import { X, ShoppingBag, Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { CartItem } from '@/lib/data';
+import { subscribeAuth } from '@/lib/auth';
 
 interface CartDrawerProps {
   open: boolean;
@@ -12,7 +14,15 @@ interface CartDrawerProps {
 }
 
 export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty }: CartDrawerProps) {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeAuth((user) => setIsLoggedIn(Boolean(user)));
+    return () => unsub();
+  }, []);
+
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
+  const totalQuantity = items.reduce((s, i) => s + i.quantity, 0);
   const shipping = subtotal > 999 ? 0 : 99;
   const total = subtotal + shipping;
 
@@ -29,7 +39,7 @@ export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty
             <ShoppingBag size={20} className="text-blush-500" />
             <h2 className="font-display text-xl text-cocoa-800">Your Cart</h2>
             <span className="ml-1 text-xs bg-blush-100 text-blush-600 px-2 py-0.5 rounded-full font-body font-medium">
-              {items.length} {items.length === 1 ? 'item' : 'items'}
+              {totalQuantity} {totalQuantity === 1 ? 'item' : 'items'}
             </span>
           </div>
           <button onClick={onClose} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-cream-200 transition-colors">
@@ -96,9 +106,9 @@ export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty
                 <span>Total</span><span className="font-display">₹{total.toFixed(0)}</span>
               </div>
             </div>
-            <Link href="/checkout" onClick={onClose}
+            <Link href={isLoggedIn ? '/checkout' : '/login?next=%2Fcheckout'} onClick={onClose}
               className="w-full flex items-center justify-center gap-2 bg-blush-500 hover:bg-blush-600 text-white py-3.5 rounded-full font-medium text-sm transition-colors font-body">
-              Proceed to Checkout <ArrowRight size={16} />
+              {isLoggedIn ? 'Proceed to Checkout' : 'Login to Checkout'} <ArrowRight size={16} />
             </Link>
             <button onClick={onClose} className="w-full text-center text-sm text-cocoa-700/60 hover:text-cocoa-800 transition-colors font-body py-1">
               Continue Shopping

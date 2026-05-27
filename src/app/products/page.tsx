@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { SlidersHorizontal, Grid3x3, List, ChevronDown, Search } from 'lucide-react';
-import { CartItem, Product } from '@/lib/data';
+import { Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -11,6 +11,8 @@ import { subscribeCategories } from '@/lib/categories';
 import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
+import { useCart } from '@/lib/cart';
+import { trackCartInterest } from '@/lib/cartInterest';
 
 export default function ProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -20,7 +22,7 @@ export default function ProductsPage() {
   const [search, setSearch] = useState('');
   const [gridView, setGridView] = useState(true);
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const { items: cartItems, cartCount, addProduct, removeItem, updateQuantity } = useCart();
   const [priceRange, setPriceRange] = useState([0, 500]);
   const [filterOpen, setFilterOpen] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -69,11 +71,8 @@ export default function ProductsPage() {
   const addToCart = (productId: string) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
-    setCartItems(prev => {
-      const ex = prev.find(i => i.id === productId);
-      if (ex) return prev.map(i => i.id === productId ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: 1 }];
-    });
+    addProduct(product, 1);
+    void trackCartInterest(user, productId, 1);
     setCartOpen(true);
   };
 
@@ -89,8 +88,6 @@ export default function ProductsPage() {
         return 0;
       });
   }, [products, selectedCategory, search, priceRange, sortBy]);
-
-  const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
 
   const toggleWishlist = async (productId: string) => {
     if (!user) {
@@ -185,11 +182,8 @@ export default function ProductsPage() {
       </main>
       <Footer />
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems}
-        onRemove={id => setCartItems(prev => prev.filter(i => i.id !== id))}
-        onUpdateQty={(id, qty) => {
-          if (qty < 1) setCartItems(prev => prev.filter(i => i.id !== id));
-          else setCartItems(prev => prev.map(i => i.id === id ? { ...i, quantity: qty } : i));
-        }} />
+        onRemove={removeItem}
+        onUpdateQty={updateQuantity} />
     </>
   );
 }

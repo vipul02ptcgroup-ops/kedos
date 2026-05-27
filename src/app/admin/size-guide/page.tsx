@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { DEFAULT_SIZE_GUIDE, saveSizeGuide, subscribeSizeGuide, type SizeGuideContent } from '@/lib/sizeGuide';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 export default function AdminSizeGuidePage() {
   const [form, setForm] = useState<SizeGuideContent>(DEFAULT_SIZE_GUIDE);
@@ -28,6 +29,11 @@ export default function AdminSizeGuidePage() {
             rows: (s.rows || []).filter((r) => r.label || r.value),
           }))
           .filter((s) => s.title || s.rows.length > 0),
+      });
+      await createAdminLog({
+        action: 'size_guide_saved',
+        ...getAdminActorSnapshot(),
+        details: `customSections=${form.customSections?.length || 0}, clothingRows=${form.clothingRows.length}, shoeRows=${form.shoeRows.length}`,
       });
       setMessage('Size guide updated.');
     } catch (err: any) {

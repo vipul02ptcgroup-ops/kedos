@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import {
   LayoutDashboard, Package, ShoppingCart, Users, Settings, Star,
-  Menu, X, Bell, ChevronDown, TrendingUp, LogOut, BarChart2, Tags, Heart, MessageSquare, Mail, MessageCircleMore, Ruler
+  Menu, X, Bell, ChevronDown, TrendingUp, LogOut, BarChart2, Tags, Heart, MessageSquare, Mail, MessageCircleMore, Ruler, ShoppingBag, TicketPercent, ClipboardList
 } from 'lucide-react';
 import { getUserRole, logoutUser, subscribeAuth } from '@/lib/auth';
 import { doc, getDoc, onSnapshot } from 'firebase/firestore';
@@ -27,6 +27,7 @@ const NAV_SECTIONS = [
     title: 'Sales',
     items: [
       { label: 'Orders', href: '/admin/orders', icon: ShoppingCart },
+      { label: 'Coupons', href: '/admin/coupons', icon: TicketPercent },
       { label: 'Reviews', href: '/admin/reviews', icon: MessageCircleMore },
       { label: 'Analytics', href: '/admin/analytics', icon: BarChart2 },
     ],
@@ -37,6 +38,7 @@ const NAV_SECTIONS = [
       { label: 'Subscribers', href: '/admin/subscribers', icon: Mail },
       { label: 'Messages', href: '/admin/messages', icon: MessageSquare },
       { label: 'Wishlist', href: '/admin/wishlist', icon: Heart },
+      { label: 'Cart Interest', href: '/admin/cart-interest', icon: ShoppingBag },
     ],
   },
   {
@@ -45,7 +47,10 @@ const NAV_SECTIONS = [
   },
   {
     title: 'System',
-    items: [{ label: 'Settings', href: '/admin/settings', icon: Settings }],
+    items: [
+      { label: 'Settings', href: '/admin/settings', icon: Settings },
+      { label: 'Admin Log', href: '/admin/admin-log', icon: ClipboardList },
+    ],
   },
 ];
 
@@ -57,13 +62,16 @@ const CONTROL_BY_HREF: Record<string, string> = {
   '/admin/categories': 'categories',
   '/admin/size-guide': 'size_guide',
   '/admin/orders': 'orders',
+  '/admin/coupons': 'coupons',
   '/admin/reviews': 'reviews',
   '/admin/analytics': 'analytics',
   '/admin/subscribers': 'subscribers',
   '/admin/messages': 'messages',
   '/admin/wishlist': 'wishlist',
+  '/admin/cart-interest': 'cart_interest',
   '/admin/customers': 'customers',
   '/admin/settings': 'settings',
+  '/admin/admin-log': 'admin_log',
 };
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
@@ -116,6 +124,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   };
 
   const canAccess = (href: string) => {
+    if (href === '/admin/admin-log') return userRole === 'superadmin';
     if (userRole === 'superadmin') return true;
     if (userRole === 'admin') {
       if (href === '/admin/customers') return true;

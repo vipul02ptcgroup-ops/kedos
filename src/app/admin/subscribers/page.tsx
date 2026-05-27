@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, Trash2 } from 'lucide-react';
 import AdminLayout from '@/components/admin/AdminLayout';
 import { deleteSubscriber, subscribeSubscribers, type Subscriber } from '@/lib/subscribers';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 export default function AdminSubscribersPage() {
   const [rows, setRows] = useState<Subscriber[]>([]);
@@ -21,7 +22,15 @@ export default function AdminSubscribersPage() {
 
   const onDelete = async (id: string) => {
     if (!window.confirm('Delete this subscriber?')) return;
+    const row = rows.find((r) => r.id === id);
     await deleteSubscriber(id);
+    await createAdminLog({
+      action: 'subscriber_deleted',
+      ...getAdminActorSnapshot(),
+      targetUid: id,
+      targetEmail: row?.email || '',
+      details: 'Subscriber removed',
+    });
   };
 
   return (
@@ -85,4 +94,3 @@ export default function AdminSubscribersPage() {
     </AdminLayout>
   );
 }
-

@@ -48,6 +48,8 @@ export type CreateOrderInput = {
   shipping: number;
   discount: number;
   total: number;
+  couponCode?: string;
+  couponTitle?: string;
   delivery: DeliveryAddress;
 };
 
@@ -68,6 +70,8 @@ export type FirestoreOrder = {
   shipping: number;
   discount: number;
   total: number;
+  couponCode?: string;
+  couponTitle?: string;
   delivery: DeliveryAddress;
   createdAt: Timestamp | null;
   updatedAt: Timestamp | null;
@@ -121,6 +125,8 @@ export async function createOrder(input: CreateOrderInput): Promise<{ id: string
     shipping: input.shipping,
     discount: input.discount,
     total: input.total,
+    couponCode: String(input.couponCode || '').trim() || null,
+    couponTitle: String(input.couponTitle || '').trim() || null,
     delivery: input.delivery,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),

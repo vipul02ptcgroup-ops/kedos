@@ -2,8 +2,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { ShoppingBag, Heart, Star, Shield, Leaf, Truck, ChevronRight, ChevronLeft, Minus, Plus, Check } from 'lucide-react';
-import { Product, CartItem } from '@/lib/data';
+import { ShoppingBag, Heart, Star, Shield, Leaf, Truck, ChevronRight, ChevronLeft, Minus, Plus, Check, TicketPercent } from 'lucide-react';
+import { Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -16,6 +16,9 @@ import { User as FirebaseUser } from 'firebase/auth';
 import { toSlug } from '@/lib/slug';
 import { createReview, subscribeProductReviews, type ProductReview } from '@/lib/reviews';
 import { subscribeOrdersForUserIdentity, type FirestoreOrder } from '@/lib/orders';
+import { useCart } from '@/lib/cart';
+import { trackCartInterest } from '@/lib/cartInterest';
+import { subscribeActiveCouponsForProduct, type CouponDoc } from '@/lib/coupons';
 
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -38,7 +41,7 @@ export default function ProductDetailPage() {
   const [qty, setQty] = useState(1);
   const [activeTab, setActiveTab] = useState('description');
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const { items: cartItems, cartCount, addProduct, removeItem, updateQuantity } = useCart();
   const [added, setAdded] = useState(false);
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -49,6 +52,8 @@ export default function ProductDetailPage() {
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewError, setReviewError] = useState('');
   const [showReviewForm, setShowReviewForm] = useState(false);
+  const [activeCoupons, setActiveCoupons] = useState<CouponDoc[]>([]);
+  const [copiedCouponId, setCopiedCouponId] = useState('');
   const galleryImages = useMemo(() => {
     if (!product) return [];
     const images = product.images?.length ? product.images : [product.image];
@@ -97,6 +102,11 @@ export default function ProductDetailPage() {
   }, [product?.id]);
 
   useEffect(() => {
+    const unsub = subscribeActiveCouponsForProduct(product?.id, setActiveCoupons);
+    return () => unsub();
+  }, [product?.id]);
+
+  useEffect(() => {
     if (user?.displayName && !reviewForm.name) {
       setReviewForm((prev) => ({ ...prev, name: user.displayName || '' }));
     }
@@ -119,17 +129,34 @@ export default function ProductDetailPage() {
     const pid = productId || product?.id || routeKey;
     const prod = products.find(p => p.id === pid);
     if (!prod) return;
-    setCartItems(prev => {
-      const ex = prev.find(i => i.id === pid);
-      const addQty = pid === product?.id ? qty : 1;
-      if (ex) return prev.map(i => i.id === pid ? { ...i, quantity: i.quantity + addQty } : i);
-      return [...prev, { ...prod, quantity: addQty }];
-    });
+    const addQty = pid === product?.id ? qty : 1;
+    if (pid === product?.id) {
+      const existingQty = cartItems.find((i) => i.id === pid)?.quantity || 0;
+      if (existingQty > 0) {
+        updateQuantity(pid, addQty);
+        if (addQty > existingQty) void trackCartInterest(user, pid, addQty - existingQty);
+      } else {
+        addProduct(prod, addQty);
+        void trackCartInterest(user, pid, addQty);
+      }
+    } else {
+      addProduct(prod, addQty);
+      void trackCartInterest(user, pid, addQty);
+    }
     if (!productId) { setAdded(true); setTimeout(() => setAdded(false), 2000); }
     setCartOpen(true);
   };
+  const currentCartQty = useMemo(() => {
+    if (!product?.id) return 0;
+    return cartItems.find((i) => i.id === product.id)?.quantity || 0;
+  }, [cartItems, product?.id]);
 
-  const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
+  useEffect(() => {
+    if (!product?.id) return;
+    if (currentCartQty > 0) {
+      setQty(currentCartQty);
+    }
+  }, [product?.id, currentCartQty]);
   const related = products.filter(p => p.id !== product?.id && p.category === product?.category).slice(0, 4);
   const isWishlisted = !!product && wishlistIds.includes(product.id);
 
@@ -190,6 +217,16 @@ export default function ProductDetailPage() {
       setReviewError(err?.message || 'Unable to submit review.');
     } finally {
       setReviewSaving(false);
+    }
+  };
+
+  const copyCouponCode = async (coupon: CouponDoc) => {
+    try {
+      await navigator.clipboard.writeText(coupon.codeUpper);
+      setCopiedCouponId(coupon.id);
+      window.setTimeout(() => setCopiedCouponId(''), 1200);
+    } catch {
+      setCopiedCouponId('');
     }
   };
 
@@ -311,6 +348,45 @@ export default function ProductDetailPage() {
                 )}
               </div>
 
+              {activeCoupons.length > 0 && (
+                <div className="mb-5 overflow-hidden rounded-2xl border border-pink-200/70 bg-gradient-to-r from-rose-100 via-fuchsia-50 to-sky-100 p-3.5 shadow-sm">
+                  <div className="mb-2.5 flex items-center gap-2 text-rose-700">
+                    <div className="flex h-6 w-6 items-center justify-center rounded-full bg-white/80 shadow-sm">
+                      <TicketPercent size={14} />
+                    </div>
+                    <p className="text-xs font-semibold uppercase tracking-wider font-body">Available Offers</p>
+                  </div>
+                  <div className="space-y-2">
+                    {activeCoupons.slice(0, 2).map((coupon) => (
+                      <button
+                        key={coupon.id}
+                        type="button"
+                        onClick={() => copyCouponCode(coupon)}
+                        className="group relative flex w-full items-center justify-between rounded-xl border border-white/70 bg-white/80 px-3 py-2 text-left backdrop-blur-sm transition-all hover:-translate-y-0.5 hover:bg-white hover:shadow-md"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="rounded-md border border-rose-300 bg-rose-50 px-2 py-1 text-xs font-extrabold tracking-wide text-rose-700 font-body">
+                            {coupon.codeUpper}
+                          </span>
+                          <span className="text-sm font-semibold text-cocoa-800 font-body">
+                            {coupon.discountType === 'percent' ? `${coupon.discountValue}% OFF` : `₹${coupon.discountValue} OFF`}
+                          </span>
+                        </div>
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[11px] font-medium font-body transition-colors ${
+                            copiedCouponId === coupon.id
+                              ? 'bg-emerald-100 text-emerald-700'
+                              : 'bg-sky-100 text-sky-700 group-hover:bg-sky-200'
+                          }`}
+                        >
+                          {copiedCouponId === coupon.id ? 'Copied' : 'Tap to copy'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               {/* Stock */}
               <div className={`flex items-center gap-2 mb-6 text-sm font-body ${product.inStock ? 'text-sage-600' : 'text-red-500'}`}>
                 <span className={`w-2 h-2 rounded-full ${product.inStock ? 'bg-sage-500' : 'bg-red-500'}`} />
@@ -320,12 +396,29 @@ export default function ProductDetailPage() {
               {/* Qty + Cart */}
               <div className="flex items-center gap-3 mb-4">
                 <div className="flex items-center gap-3 bg-cream-100 rounded-full px-4 py-2.5">
-                  <button onClick={() => setQty(q => Math.max(1, q - 1))}
+                  <button
+                    onClick={() => {
+                      if (product?.id && currentCartQty > 0) {
+                        const next = Math.max(1, currentCartQty - 1);
+                        updateQuantity(product.id, next);
+                        return;
+                      }
+                      setQty((q) => Math.max(1, q - 1));
+                    }}
                     className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-cream-300 transition-colors">
                     <Minus size={14} />
                   </button>
-                  <span className="w-8 text-center font-display text-base">{qty}</span>
-                  <button onClick={() => setQty(q => q + 1)}
+                  <span className="w-8 text-center font-display text-base">{currentCartQty > 0 ? currentCartQty : qty}</span>
+                  <button
+                    onClick={() => {
+                      if (product?.id && currentCartQty > 0) {
+                        const next = currentCartQty + 1;
+                        updateQuantity(product.id, next);
+                        void trackCartInterest(user, product.id, 1);
+                        return;
+                      }
+                      setQty((q) => q + 1);
+                    }}
                     className="w-6 h-6 flex items-center justify-center rounded-full hover:bg-cream-300 transition-colors">
                     <Plus size={14} />
                   </button>
@@ -519,11 +612,8 @@ export default function ProductDetailPage() {
       </main>
       <Footer />
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems}
-        onRemove={id => setCartItems(prev => prev.filter(i => i.id !== id))}
-        onUpdateQty={(id, qty) => {
-          if (qty < 1) setCartItems(prev => prev.filter(i => i.id !== id));
-          else setCartItems(prev => prev.map(i => i.id === id ? { ...i, quantity: qty } : i));
-        }} />
+        onRemove={removeItem}
+        onUpdateQty={updateQuantity} />
     </>
   );
 }

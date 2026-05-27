@@ -2,25 +2,19 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ShoppingBag, Minus, Plus, Trash2, ArrowRight, Tag } from 'lucide-react';
-import { CartItem } from '@/lib/data';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import { useCart } from '@/lib/cart';
 
 export default function CartPage() {
-  const [items, setItems] = useState<CartItem[]>([]);
+  const { items, cartCount, updateQuantity, removeItem } = useCart();
   const [coupon, setCoupon] = useState('');
   const [couponApplied, setCouponApplied] = useState(false);
-
-  const updateQty = (id: string, qty: number) => {
-    if (qty < 1) setItems(prev => prev.filter(i => i.id !== id));
-    else setItems(prev => prev.map(i => i.id === id ? { ...i, quantity: qty } : i));
-  };
 
   const subtotal = items.reduce((s, i) => s + i.price * i.quantity, 0);
   const shipping = subtotal > 999 ? 0 : 99;
   const discount = couponApplied ? subtotal * 0.1 : 0;
   const total = subtotal + shipping - discount;
-  const cartCount = items.reduce((s, i) => s + i.quantity, 0);
 
   return (
     <>
@@ -52,19 +46,19 @@ export default function CartPage() {
                       {item.ageRange && <p className="text-xs text-cocoa-700/50 font-body">Ages: {item.ageRange}</p>}
                       <div className="flex items-center justify-between mt-3">
                         <div className="flex items-center gap-2 bg-cream-100 rounded-full px-3 py-1.5">
-                          <button onClick={() => updateQty(item.id, item.quantity - 1)}
+                          <button onClick={() => updateQuantity(item.id, item.quantity - 1)}
                             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-cream-300 transition-colors">
                             <Minus size={12} />
                           </button>
                           <span className="w-6 text-center text-sm font-medium font-body">{item.quantity}</span>
-                          <button onClick={() => updateQty(item.id, item.quantity + 1)}
+                          <button onClick={() => updateQuantity(item.id, item.quantity + 1)}
                             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-cream-300 transition-colors">
                             <Plus size={12} />
                           </button>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-display text-lg text-cocoa-800">₹{(item.price * item.quantity).toFixed(0)}</span>
-                          <button onClick={() => updateQty(item.id, 0)} className="text-cocoa-700/30 hover:text-red-400 transition-colors">
+                          <button onClick={() => removeItem(item.id)} className="text-cocoa-700/30 hover:text-red-400 transition-colors">
                             <Trash2 size={16} />
                           </button>
                         </div>

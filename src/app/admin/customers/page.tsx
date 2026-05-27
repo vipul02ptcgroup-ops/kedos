@@ -5,6 +5,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { collection, doc, onSnapshot, query, updateDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { UserRole, getUserRole, subscribeAuth } from '@/lib/auth';
+import { createAdminLog } from '@/lib/adminLogs';
 
 type AdminUserRow = {
   id: string;
@@ -22,11 +23,13 @@ const AVAILABLE_CONTROLS = [
   { key: 'categories', label: 'Categories' },
   { key: 'size_guide', label: 'Size Guide' },
   { key: 'orders', label: 'Orders' },
+  { key: 'coupons', label: 'Coupons' },
   { key: 'reviews', label: 'Reviews' },
   { key: 'analytics', label: 'Analytics' },
   { key: 'subscribers', label: 'Subscribers' },
   { key: 'messages', label: 'Messages' },
   { key: 'wishlist', label: 'Wishlist' },
+  { key: 'cart_interest', label: 'Cart Interest' },
   { key: 'customers', label: 'Customers' },
   { key: 'settings', label: 'Settings' },
 ];
@@ -45,6 +48,9 @@ export default function AdminCustomersPage() {
   const [controlsForm, setControlsForm] = useState<string[]>([]);
   const [savingControls, setSavingControls] = useState(false);
   const [viewerRole, setViewerRole] = useState<UserRole>('customer');
+  const [viewerUid, setViewerUid] = useState('');
+  const [viewerEmail, setViewerEmail] = useState('');
+  const [viewerName, setViewerName] = useState('');
 
   useEffect(() => {
     if (!db) return;
@@ -75,10 +81,16 @@ export default function AdminCustomersPage() {
     const unsub = subscribeAuth(async (user) => {
       if (!user) {
         setViewerRole('customer');
+        setViewerUid('');
+        setViewerEmail('');
+        setViewerName('');
         return;
       }
       const role = await getUserRole(user.uid);
       setViewerRole(role);
+      setViewerUid(user.uid || '');
+      setViewerEmail(user.email || '');
+      setViewerName(user.displayName || '');
     });
     return () => unsub();
   }, []);
@@ -107,7 +119,18 @@ export default function AdminCustomersPage() {
   const totalCustomers = users.filter((u) => u.role === 'customer').length;
 
   const updateUserRole = async (userId: string, role: UserRole) => {
+    const target = users.find((u) => u.id === userId);
+    const fromRole = target?.role || 'customer';
     await updateDoc(doc(db, 'users', userId), { role });
+    await createAdminLog({
+      action: 'role_changed',
+      actorUid: viewerUid,
+      actorEmail: viewerEmail,
+      actorName: viewerName,
+      targetUid: target?.uid || userId,
+      targetEmail: target?.email || '',
+      details: `Role updated from ${fromRole} to ${role}.`,
+    });
   };
 
   const openControls = (u: AdminUserRow) => {
@@ -120,6 +143,15 @@ export default function AdminCustomersPage() {
     setSavingControls(true);
     try {
       await updateDoc(doc(db, 'users', selectedUser.id), { adminControls: controlsForm });
+      await createAdminLog({
+        action: 'admin_controls_updated',
+        actorUid: viewerUid,
+        actorEmail: viewerEmail,
+        actorName: viewerName,
+        targetUid: selectedUser.uid,
+        targetEmail: selectedUser.email,
+        details: `Controls set to: ${controlsForm.length ? controlsForm.join(', ') : 'none'}.`,
+      });
       setSelectedUser(null);
       setControlsForm([]);
     } finally {

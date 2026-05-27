@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, Star, LogIn } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -9,6 +9,7 @@ import { completeGoogleRedirectSignIn, continueWithGoogle, getUserRole, loginWit
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [show, setShow] = useState(false);
   const [form, setForm] = useState({ email: '', password: '', remember: false });
   const [loading, setLoading] = useState(false);
@@ -33,6 +34,11 @@ export default function LoginPage() {
   }, []);
 
   const redirectAfterLogin = async (uid: string) => {
+    const nextPath = searchParams.get('next');
+    if (nextPath && nextPath.startsWith('/')) {
+      router.push(nextPath);
+      return;
+    }
     const role = await getUserRole(uid);
     router.push(role === 'admin' || role === 'superadmin' ? '/admin' : '/profile');
   };

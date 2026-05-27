@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { removeProduct, saveProduct, subscribeProducts } from '@/lib/products';
 import { subscribeCategories } from '@/lib/categories';
 import { getProductSlug } from '@/lib/slug';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 const emptyProduct: Omit<Product, 'id'> = {
   name: '',
@@ -99,6 +100,7 @@ export default function AdminProductsPage() {
       .flatMap((item) => String(item).split(','))
       .map((item) => item.trim())
       .filter(Boolean);
+    const isEdit = Boolean(editProduct?.id);
     await saveProduct({
       ...form,
       image: images[0] || form.image,
@@ -107,6 +109,14 @@ export default function AdminProductsPage() {
       rating: Number.isFinite(form.rating) ? form.rating : 0,
       reviews: Number.isFinite(form.reviews) ? form.reviews : 0,
       id: editProduct?.id,
+    });
+    const actor = getAdminActorSnapshot();
+    await createAdminLog({
+      action: isEdit ? 'product_updated' : 'product_created',
+      ...actor,
+      targetUid: editProduct?.id || '',
+      targetEmail: '',
+      details: `${form.name} (${form.category})`,
     });
     setShowModal(false);
   };
@@ -165,7 +175,16 @@ export default function AdminProductsPage() {
   };
 
   const onDelete = async (id: string) => {
+    const target = products.find((p) => p.id === id);
     await removeProduct(id);
+    const actor = getAdminActorSnapshot();
+    await createAdminLog({
+      action: 'product_deleted',
+      ...actor,
+      targetUid: id,
+      targetEmail: '',
+      details: target?.name || id,
+    });
   };
 
   return (

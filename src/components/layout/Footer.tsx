@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { Mail, Phone, MapPin, ShieldCheck, Leaf, Truck } from 'lucide-react';
 import { subscribeCategories } from '@/lib/categories';
-import { subscribeEmail } from '@/lib/subscribers';
+import { isEmailSubscribed, subscribeEmail } from '@/lib/subscribers';
 import { subscribeAuth } from '@/lib/auth';
 import { User as FirebaseUser } from 'firebase/auth';
 
@@ -12,6 +12,7 @@ export default function Footer() {
   const [email, setEmail] = useState('');
   const [loading, setLoading] = useState(false);
   const [feedback, setFeedback] = useState('');
+  const [subscribed, setSubscribed] = useState(false);
   const [user, setUser] = useState<FirebaseUser | null>(null);
 
   useEffect(() => {
@@ -30,6 +31,23 @@ export default function Footer() {
     setEmail((prev) => (prev.trim() ? prev : userEmail));
   }, [user?.email]);
 
+  useEffect(() => {
+    let active = true;
+    const run = async () => {
+      const clean = email.trim();
+      if (!clean) {
+        if (active) setSubscribed(false);
+        return;
+      }
+      const found = await isEmailSubscribed(clean).catch(() => false);
+      if (active) setSubscribed(found);
+    };
+    void run();
+    return () => {
+      active = false;
+    };
+  }, [email]);
+
   const footerCategories = useMemo(() => {
     if (categories.length > 0) return categories;
     return ['New Arrivals', 'Best Sellers', 'Clothing', 'Toys & Play', 'Nursery', 'Bath Time', 'Feeding', 'Gear'];
@@ -45,8 +63,8 @@ export default function Footer() {
     setLoading(true);
     try {
       const result = await subscribeEmail(clean);
-      setFeedback(result.created ? 'Subscribed successfully.' : 'This email is already subscribed.');
-      if (result.created) setEmail('');
+      setFeedback(result.created ? '' : 'This email is already subscribed.');
+      setSubscribed(true);
     } catch (err: any) {
       setFeedback(err?.message || 'Unable to subscribe right now.');
     } finally {
@@ -72,10 +90,10 @@ export default function Footer() {
             />
             <button
               onClick={onSubscribe}
-              disabled={loading}
-              className="px-6 py-3 bg-cocoa-800 text-cream-100 rounded-full text-sm font-medium hover:bg-cocoa-900 transition-colors font-body whitespace-nowrap disabled:opacity-60"
+              disabled={loading || subscribed}
+              className="px-6 py-3 bg-cocoa-800 text-cream-100 rounded-full text-sm font-medium hover:bg-cocoa-900 transition-colors font-body whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
             >
-              {loading ? 'Subscribing...' : 'Subscribe'}
+              {subscribed ? 'Subscribed' : loading ? 'Subscribing...' : 'Subscribe'}
             </button>
           </div>
           {feedback && <p className="text-xs text-white/90 font-body w-full md:w-auto md:min-w-[260px]">{feedback}</p>}

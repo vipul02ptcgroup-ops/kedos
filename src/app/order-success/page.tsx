@@ -148,7 +148,7 @@ export default function OrderSuccessPage() {
                   {[
                     { label: 'Order ID', val: `#${resolved.orderCode || resolved.id}` },
                     { label: 'Date', val: orderDate },
-                    { label: 'Total', val: `?${resolved.total.toFixed(0)}` },
+                    { label: 'Total', val: `₹${resolved.total.toFixed(0)}` },
                     { label: 'Payment', val: resolved.paymentMethod.toUpperCase() },
                   ].map((item) => (
                     <div key={item.label} className="p-3 bg-cream-50 rounded-xl">
@@ -197,7 +197,7 @@ export default function OrderSuccessPage() {
                         <p className="text-sm font-medium text-cocoa-800 font-body">{item.name}</p>
                         <p className="text-xs text-cocoa-700/50 font-body">Qty: {item.quantity}</p>
                       </div>
-                      <span className="font-display text-sm text-cocoa-800">?{(item.price * item.quantity).toFixed(0)}</span>
+                      <span className="font-display text-sm text-cocoa-800">₹{(item.price * item.quantity).toFixed(0)}</span>
                     </div>
                   ))}
                 </div>

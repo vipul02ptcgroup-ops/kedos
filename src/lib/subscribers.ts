@@ -39,6 +39,16 @@ export async function subscribeEmail(email: string): Promise<{ created: boolean 
   return { created: true };
 }
 
+export async function isEmailSubscribed(email: string): Promise<boolean> {
+  if (!db) return false;
+  const cleanEmail = String(email || '').trim();
+  const emailLower = cleanEmail.toLowerCase();
+  if (!cleanEmail) return false;
+  const q = query(collection(db, 'subscribers'), where('emailLower', '==', emailLower));
+  const snap = await getDocs(q);
+  return !snap.empty;
+}
+
 export function subscribeSubscribers(onData: (rows: Subscriber[]) => void): Unsubscribe {
   if (!db) {
     onData([]);
@@ -59,4 +69,3 @@ export async function deleteSubscriber(id: string): Promise<void> {
   if (!db) throw new Error('Firebase is not configured');
   await deleteDoc(doc(collection(db, 'subscribers'), id));
 }
-

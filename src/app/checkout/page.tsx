@@ -3,20 +3,21 @@ import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Shield, Truck, Tag, CreditCard, Smartphone, IndianRupee  } from 'lucide-react';
-import { Product } from '@/lib/data';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import { subscribeProducts } from '@/lib/products';
 import { getUserProfile, subscribeAuth } from '@/lib/auth';
 import { createOrder } from '@/lib/orders';
 import { UserAddress, subscribeUserAddresses } from '@/lib/addresses';
+import { useCart } from '@/lib/cart';
+import { applyCouponToItems, subscribeCoupons, type CouponDoc } from '@/lib/coupons';
 
 export default function CheckoutPage() {
-  const [products, setProducts] = useState<Product[]>([]);
   const [step, setStep] = useState(1);
   const [paymentMethod, setPaymentMethod] = useState('card');
   const [coupon, setCoupon] = useState('');
-  const [couponApplied, setCouponApplied] = useState(false);
+  const [couponFeedback, setCouponFeedback] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<CouponDoc | null>(null);
+  const [coupons, setCoupons] = useState<CouponDoc[]>([]);
   const [isPinLoading, setIsPinLoading] = useState(false);
   const [pinError, setPinError] = useState('');
   const [isPinValid, setIsPinValid] = useState(false);
@@ -29,6 +30,7 @@ export default function CheckoutPage() {
   const [selectedAddressId, setSelectedAddressId] = useState('');
   const [showAddressForm, setShowAddressForm] = useState(false);
   const router = useRouter();
+  const { items: cartItems, clearCart } = useCart();
   const [deliveryForm, setDeliveryForm] = useState({
     firstName: '',
     lastName: '',
@@ -41,13 +43,16 @@ export default function CheckoutPage() {
   });
 
   useEffect(() => {
-    const unsub = subscribeProducts(setProducts);
+    const unsub = subscribeCoupons(setCoupons);
     return () => unsub();
   }, []);
 
   useEffect(() => {
     const unsub = subscribeAuth(async (user) => {
-      if (!user) return;
+      if (!user) {
+        router.replace('/login?next=%2Fcheckout');
+        return;
+      }
       setUserId(user.uid || '');
 
       const profile = await getUserProfile(user.uid).catch(() => null);
@@ -63,7 +68,7 @@ export default function CheckoutPage() {
       }));
     });
     return () => unsub();
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     if (!userId) {
@@ -196,13 +201,16 @@ export default function CheckoutPage() {
     };
   }, [deliveryForm.pin, deliveryForm.city, deliveryForm.state, isPinTrusted]);
 
-  const sampleItems = useMemo(() => {
-    return products.slice(0, 2).map((item) => ({ ...item, quantity: 1 }));
-  }, [products]);
+  const sampleItems = useMemo(() => cartItems, [cartItems]);
 
   const subtotal = sampleItems.reduce((s, i) => s + i.price * i.quantity, 0);
   const shipping = subtotal > 999 ? 0 : 99;
-  const discount = couponApplied ? subtotal * 0.1 : 0;
+  const couponResult = useMemo(() => {
+    if (!appliedCoupon) return { discountAmount: 0 };
+    const result = applyCouponToItems(coupons, appliedCoupon.codeUpper, sampleItems);
+    return result.ok ? { discountAmount: result.discountAmount } : { discountAmount: 0 };
+  }, [appliedCoupon, coupons, sampleItems]);
+  const discount = couponResult.discountAmount;
   const total = subtotal + shipping - discount;
   const hasManualLocation = Boolean(deliveryForm.city.trim() && deliveryForm.state.trim());
   const isDeliveryComplete = Boolean(
@@ -217,6 +225,17 @@ export default function CheckoutPage() {
   );
 
   const STEPS = ['Delivery', 'Payment', 'Review'];
+
+  const handleApplyCoupon = () => {
+    const result = applyCouponToItems(coupons, coupon, sampleItems);
+    if (!result.ok || !result.coupon) {
+      setAppliedCoupon(null);
+      setCouponFeedback(result.message);
+      return;
+    }
+    setAppliedCoupon(result.coupon);
+    setCouponFeedback(`${result.coupon.codeUpper} applied.`);
+  };
 
   const handlePlaceOrder = async () => {
     if (!isDeliveryComplete || isPinLoading || isPlacingOrder || sampleItems.length === 0) return;
@@ -244,6 +263,8 @@ export default function CheckoutPage() {
         shipping,
         discount,
         total,
+        couponCode: appliedCoupon?.codeUpper || '',
+        couponTitle: appliedCoupon?.title || '',
         delivery: {
           firstName: deliveryForm.firstName.trim(),
           lastName: deliveryForm.lastName.trim(),
@@ -270,12 +291,14 @@ export default function CheckoutPage() {
             shipping,
             discount,
             total,
+            couponCode: appliedCoupon?.codeUpper || '',
             createdAtIso: new Date().toISOString(),
           })
         );
       }
 
       router.push(`/order-success?orderId=${encodeURIComponent(orderId)}`);
+      clearCart();
     } catch {
       setOrderError('Unable to place order right now. Please try again.');
     } finally {
@@ -559,14 +582,14 @@ export default function CheckoutPage() {
                       placeholder="Coupon code"
                       className="w-full pl-8 pr-3 py-2.5 rounded-xl border border-cream-200 bg-cream-50 text-sm font-body focus:outline-none focus:ring-2 focus:ring-blush-300 text-cocoa-800" />
                   </div>
-                  <button onClick={() => coupon && setCouponApplied(true)}
+                  <button onClick={handleApplyCoupon}
                     className="px-4 py-2.5 bg-cocoa-800 text-cream-100 rounded-xl text-sm font-medium font-body hover:bg-cocoa-900 transition-colors">
                     Apply
                   </button>
                 </div>
-                {couponApplied && (
-                  <div className="text-xs text-sage-600 font-body bg-sage-50 px-3 py-2 rounded-lg mb-4">
-                    ✓ Coupon applied - 10% off!
+                {couponFeedback && (
+                  <div className={`text-xs font-body px-3 py-2 rounded-lg mb-4 ${appliedCoupon ? 'text-sage-600 bg-sage-50' : 'text-red-600 bg-red-50'}`}>
+                    {couponFeedback}
                   </div>
                 )}
 
@@ -581,6 +604,11 @@ export default function CheckoutPage() {
                   {discount > 0 && (
                     <div className="flex justify-between text-sm font-body text-sage-600">
                       <span>Discount</span><span>-₹{discount.toFixed(0)}</span>
+                    </div>
+                  )}
+                  {appliedCoupon && (
+                    <div className="flex justify-between text-sm font-body text-cocoa-700">
+                      <span>Coupon</span><span>{appliedCoupon.codeUpper}</span>
                     </div>
                   )}
                   <div className="flex justify-between text-base font-medium pt-2 border-t border-cream-200">
@@ -602,3 +630,4 @@ export default function CheckoutPage() {
     </>
   );
 }
+

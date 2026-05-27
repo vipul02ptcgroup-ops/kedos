@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShoppingBag, Heart, Star } from 'lucide-react';
 import { Product } from '@/lib/data';
 import { getProductSlug } from '@/lib/slug';
@@ -24,9 +25,12 @@ export default function ProductCard({ product, onAddToCart, isWishlisted = false
     <div className="group relative bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-xl transition-all duration-300 hover:-translate-y-1">
       {/* Image */}
       <div className="relative aspect-square overflow-hidden bg-cream-100">
-        <img
+        <Image
           src={product.image}
           alt={product.name}
+          fill
+          sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+          loading="lazy"
           className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
         />
         {/* Badges */}

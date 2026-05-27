@@ -5,6 +5,7 @@ import AdminLayout from '@/components/admin/AdminLayout';
 import { CategoryDoc, createCategory, removeCategoryByName, renameCategory, subscribeCategoryDocs } from '@/lib/categories';
 import { Product } from '@/lib/data';
 import { subscribeProducts } from '@/lib/products';
+import { createAdminLog, getAdminActorSnapshot } from '@/lib/adminLogs';
 
 export default function AdminCategoriesPage() {
   const [categories, setCategories] = useState<CategoryDoc[]>([]);
@@ -36,6 +37,11 @@ export default function AdminCategoriesPage() {
   const onAdd = async () => {
     setError('');
     await createCategory(newCategory, newIconName);
+    await createAdminLog({
+      action: 'category_created',
+      ...getAdminActorSnapshot(),
+      details: `${newCategory} (${newIconName})`,
+    });
     setNewCategory('');
     setNewIconName('Tag');
   };
@@ -47,6 +53,11 @@ export default function AdminCategoriesPage() {
       return;
     }
     await removeCategoryByName(name);
+    await createAdminLog({
+      action: 'category_deleted',
+      ...getAdminActorSnapshot(),
+      details: name,
+    });
   };
 
   const onStartEdit = (name: string) => {
@@ -62,6 +73,11 @@ export default function AdminCategoriesPage() {
     setError('');
     try {
       await renameCategory(editFrom, editTo, editIconName);
+      await createAdminLog({
+        action: 'category_updated',
+        ...getAdminActorSnapshot(),
+        details: `${editFrom} -> ${editTo} (${editIconName})`,
+      });
       setEditFrom('');
       setEditTo('');
       setEditIconName('Tag');

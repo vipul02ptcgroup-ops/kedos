@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Heart, ShoppingBag } from 'lucide-react';
-import { Product, CartItem } from '@/lib/data';
+import { Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -11,13 +11,15 @@ import { subscribeProducts } from '@/lib/products';
 import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
+import { useCart } from '@/lib/cart';
+import { trackCartInterest } from '@/lib/cartInterest';
 
 export default function WishlistPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [wishlistIds, setWishlistIds] = useState<string[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
-  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const { items: cartItems, cartCount, addProduct, removeItem, updateQuantity } = useCart();
 
   useEffect(() => {
     const unsub = subscribeProducts(setProducts);
@@ -37,15 +39,10 @@ export default function WishlistPage() {
   const addToCart = (productId: string) => {
     const product = products.find(p => p.id === productId);
     if (!product) return;
-    setCartItems(prev => {
-      const ex = prev.find(i => i.id === productId);
-      if (ex) return prev.map(i => i.id === productId ? { ...i, quantity: i.quantity + 1 } : i);
-      return [...prev, { ...product, quantity: 1 }];
-    });
+    addProduct(product, 1);
+    void trackCartInterest(user, productId, 1);
     setCartOpen(true);
   };
-
-  const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);
   const wishlist = products.filter((p) => wishlistIds.includes(p.id));
 
   const toggleWishlist = async (productId: string) => {
@@ -89,11 +86,8 @@ export default function WishlistPage() {
       </main>
       <Footer />
       <CartDrawer open={cartOpen} onClose={() => setCartOpen(false)} items={cartItems}
-        onRemove={id => setCartItems(prev => prev.filter(i => i.id !== id))}
-        onUpdateQty={(id, qty) => {
-          if (qty < 1) setCartItems(prev => prev.filter(i => i.id !== id));
-          else setCartItems(prev => prev.map(i => i.id === id ? { ...i, quantity: qty } : i));
-        }} />
+        onRemove={removeItem}
+        onUpdateQty={updateQuantity} />
     </>
   );
 }
