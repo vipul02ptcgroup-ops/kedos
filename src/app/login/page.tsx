@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Eye, EyeOff, Star, LogIn } from 'lucide-react';
@@ -8,6 +8,14 @@ import Footer from '@/components/layout/Footer';
 import { completeGoogleRedirectSignIn, continueWithGoogle, getUserRole, loginWithEmail } from '@/lib/auth';
 
 export default function LoginPage() {
+  return (
+    <Suspense fallback={null}>
+      <LoginPageContent />
+    </Suspense>
+  );
+}
+
+function LoginPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [show, setShow] = useState(false);
