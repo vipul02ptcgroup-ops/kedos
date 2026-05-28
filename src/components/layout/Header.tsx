@@ -73,10 +73,18 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
 
             {/* Actions */}
             <div className="flex items-center gap-2">
-              <button className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
+              <Link
+                href="/products?search="
+                aria-label="Search products"
+                className="flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700"
+              >
                 <Search size={18} />
-              </button>
-              <Link href="/profile?tab=Wishlist" className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
+              </Link>
+              <Link
+                href="/wishlist"
+                aria-label="Wishlist"
+                className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700"
+              >
                 <Heart size={18} />
               </Link>
               <Link href="/profile" className="hidden sm:flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700">
@@ -119,6 +127,20 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
                 {n.label}
               </Link>
             ))}
+            <Link
+              href="/wishlist"
+              onClick={() => setMobileOpen(false)}
+              className="block py-3 text-base font-medium text-cocoa-800 border-b border-cream-200"
+            >
+              Wishlist
+            </Link>
+            <Link
+              href="/profile"
+              onClick={() => setMobileOpen(false)}
+              className="block py-3 text-base font-medium text-cocoa-800 border-b border-cream-200"
+            >
+              Profile
+            </Link>
             <div className="flex gap-4 pt-4">
               {!isLoggedIn && (
                 <>

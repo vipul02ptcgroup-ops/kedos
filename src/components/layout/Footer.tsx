@@ -75,23 +75,23 @@ export default function Footer() {
   return (
     <footer className="bg-cocoa-900 text-cream-100">
       <div className="bg-blush-500">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col md:flex-row items-center gap-6 justify-between">
-          <div>
-            <h3 className="font-display text-2xl text-white">Join Our Little Village</h3>
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col md:flex-row items-start md:items-center gap-6 justify-between">
+          <div className="w-full md:w-auto text-left">
+            <h3 className="font-display text-xl sm:text-2xl text-white">Join Our Little Village</h3>
             <p className="text-white/80 text-sm mt-1 font-body">Get exclusive deals, parenting tips and new arrivals straight to your inbox.</p>
           </div>
-          <div className="flex w-full md:w-auto gap-2">
+          <div className="flex w-full md:w-auto flex-col sm:flex-row gap-2">
             <input
               type="email"
               placeholder="Your email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              className="flex-1 md:w-72 px-4 py-3 rounded-full text-sm font-body bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:bg-white/30"
+              className="w-full sm:flex-1 md:w-72 px-4 py-3 rounded-full text-sm font-body bg-white/20 text-white placeholder-white/60 border border-white/30 focus:outline-none focus:bg-white/30"
             />
             <button
               onClick={onSubscribe}
               disabled={loading || subscribed}
-              className="px-6 py-3 bg-cocoa-800 text-cream-100 rounded-full text-sm font-medium hover:bg-cocoa-900 transition-colors font-body whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
+              className="w-full sm:w-auto px-6 py-3 bg-cocoa-800 text-cream-100 rounded-full text-sm font-medium hover:bg-cocoa-900 transition-colors font-body whitespace-nowrap disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {subscribed ? 'Subscribed' : loading ? 'Subscribing...' : 'Subscribe'}
             </button>
@@ -173,9 +173,9 @@ export default function Footer() {
       </div>
 
       <div className="border-t border-cream-100/10">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <p className="text-cream-200/50 text-xs font-body">Copyright 2026 Kedos | Powered by PTCGRAM Private Limited</p>
-          <div className="flex gap-4">
+          <div className="flex flex-wrap gap-x-4 gap-y-2">
             {['Privacy Policy', 'Terms of Service', 'Cookie Policy'].map((t) => (
               <a key={t} href="#" className="text-cream-200/50 hover:text-cream-200 text-xs transition-colors font-body">
                 {t}
