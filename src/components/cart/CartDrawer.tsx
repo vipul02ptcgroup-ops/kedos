@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useState } from 'react';
 import { X, ShoppingBag, Minus, Plus, Trash2, ArrowRight } from 'lucide-react';
 import { CartItem } from '@/lib/data';
@@ -62,7 +63,15 @@ export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty
             </div>
           ) : items.map(item => (
             <div key={item.id} className="flex gap-3 bg-white rounded-xl p-3 shadow-sm">
-              <img src={item.image} alt={item.name} className="w-20 h-20 rounded-lg object-cover shrink-0" />
+              <Image
+                src={item.image}
+                alt={`${item.name} in cart`}
+                width={80}
+                height={80}
+                loading="lazy"
+                sizes="80px"
+                className="w-20 h-20 rounded-lg object-cover shrink-0"
+              />
               <div className="flex-1 min-w-0">
                 <h4 className="font-body text-sm font-medium text-cocoa-800 line-clamp-2 leading-snug">{item.name}</h4>
                 <p className="text-xs text-sage-600 font-body mt-0.5">{item.category}</p>

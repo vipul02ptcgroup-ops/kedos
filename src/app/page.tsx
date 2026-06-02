@@ -15,8 +15,9 @@ import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } fr
 import { User as FirebaseUser } from 'firebase/auth';
 import { useCart } from '@/lib/cart';
 import { trackCartInterest } from '@/lib/cartInterest';
+import { toSlug } from '@/lib/slug';
 
-const CartDrawer = dynamic(() => import('@/components/cart/CartDrawer'));
+const CartDrawer = dynamic(() => import('@/components/cart/CartDrawer'), { ssr: false });
 const BELOW_FOLD_STYLE = { contentVisibility: 'auto', containIntrinsicSize: '1px 1000px' } as const;
 
 const FEATURES = [
@@ -196,7 +197,7 @@ export default function HomePage() {
                 return (
                   <Link
                     key={cat.name}
-                    href={`/products?category=${cat.name}`}
+                    href={`/products?category=${encodeURIComponent(toSlug(cat.name))}`}
                     className={`${cat.color} relative rounded-2xl p-5 text-center transition-all duration-300 ease-out hover:shadow-xl hover:-translate-y-2 hover:scale-[1.03] cursor-pointer group overflow-hidden`}
                   >
                     <div className="absolute inset-0 bg-gradient-to-br from-white/40 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />

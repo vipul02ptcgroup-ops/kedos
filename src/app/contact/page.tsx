@@ -5,6 +5,8 @@ import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
 import { createContactMessage } from '@/lib/messages';
 import { auth } from '@/lib/firebase';
+import JsonLd from '@/components/seo/JsonLd';
+import { breadcrumbSchema, faqSchema } from '@/lib/seo';
 
 const FAQS = [
   { q: 'What is your return policy?', a: 'We offer hassle-free returns within 30 days of purchase. Items must be unused and in original packaging.' },
@@ -36,6 +38,15 @@ export default function ContactPage() {
 
   return (
     <>
+      <JsonLd
+        data={[
+          breadcrumbSchema([
+            { name: 'Home', path: '/' },
+            { name: 'Contact', path: '/contact' },
+          ]),
+          faqSchema(FAQS),
+        ]}
+      />
       <Header />
       <main className="bg-cream-50">
         {/* Hero */}
@@ -46,7 +57,7 @@ export default function ContactPage() {
             <p className="text-cream-200/70 font-body text-lg">Our team is here to help with any questions about our products.</p>
           </div>
         </div>
-
+         
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
           <div className="grid lg:grid-cols-3 gap-10">
             {/* Contact Info */}

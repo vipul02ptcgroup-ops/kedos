@@ -27,7 +27,7 @@ export default function ProductCard({ product, onAddToCart, isWishlisted = false
       <div className="relative aspect-square overflow-hidden bg-cream-100">
         <Image
           src={product.image}
-          alt={product.name}
+          alt={`${product.name} in ${product.category}`}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
           loading="lazy"

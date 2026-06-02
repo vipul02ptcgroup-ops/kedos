@@ -5,6 +5,7 @@ export const metadata = createMetadata({
   description: 'Complete your Kedos order securely.',
   path: '/checkout',
   noIndex: true,
+  keywords: ['checkout', 'secure checkout'],
 });
 
 export default function CheckoutLayout({ children }: { children: React.ReactNode }) {

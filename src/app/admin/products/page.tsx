@@ -141,10 +141,10 @@ export default function AdminProductsPage() {
           } catch {
             data = null;
           }
-          if (!response.ok || !data?.url) {
+          if (!response.ok || !data?.ok || !data?.data?.url) {
             throw new Error(data?.error || `Image upload failed (HTTP ${response.status}).`);
           }
-          return data.url as string;
+          return data.data.url as string;
         })
       );
       setForm((prev) => {

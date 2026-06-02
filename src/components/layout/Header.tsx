@@ -1,7 +1,8 @@
 'use client';
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ShoppingBag, Search, User, Menu, X, Heart, Star } from 'lucide-react';
+import Image from 'next/image';
+import { ShoppingBag, Search, User, Menu, X, Heart } from 'lucide-react';
 import { getUserRole, subscribeAuth } from '@/lib/auth';
 
 interface HeaderProps {
@@ -51,7 +52,15 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
           <div className="flex items-center justify-between h-16 lg:h-20">
             {/* Logo */}
             <Link href="/" className="flex items-center gap-2 group" aria-label="Kedos home">
-              <img src="/Images/Logo.png" alt="Kedos" className="h-14 w-auto" />
+              <Image
+                src="/Images/Logo.png"
+                alt="Kedos baby products logo"
+                width={112}
+                height={56}
+                priority
+                sizes="112px"
+                className="h-14 w-auto"
+              />
               <span className="sr-only">Kedos</span>
             </Link>
 
@@ -74,7 +83,7 @@ export default function Header({ cartCount = 0, onCartOpen }: HeaderProps) {
             {/* Actions */}
             <div className="flex items-center gap-2">
               <Link
-                href="/products?search="
+                href="/products"
                 aria-label="Search products"
                 className="flex w-9 h-9 items-center justify-center rounded-full hover:bg-cream-200 transition-colors text-cocoa-700"
               >

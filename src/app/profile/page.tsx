@@ -305,8 +305,8 @@ export default function ProfilePage() {
           return;
         }
 
-        const city = String(data?.city || '').trim();
-        const state = String(data?.state || '').trim();
+        const city = String(data?.data?.city || '').trim();
+        const state = String(data?.data?.state || '').trim();
         if (!city || !state) {
           setIsPinValid(false);
           setPinError('Could not fetch city/state for this PIN.');

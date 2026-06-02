@@ -1,5 +1,4 @@
 import { NextResponse } from 'next/server';
-import https from 'node:https';
 
 type PinResult = {
   city: string;
@@ -12,7 +11,10 @@ function isValidPin(pin: string) {
 }
 
 async function fetchZippopotam(pin: string): Promise<PinResult | null> {
-  const res = await fetch(`https://api.zippopotam.us/in/${pin}`, { cache: 'no-store' });
+  const res = await fetch(`https://api.zippopotam.us/in/${pin}`, {
+    cache: 'force-cache',
+    next: { revalidate: 60 * 60 * 24 * 7 },
+  });
   if (!res.ok) return null;
   const data: any = await res.json();
   const place = data?.places?.[0];
@@ -22,59 +24,37 @@ async function fetchZippopotam(pin: string): Promise<PinResult | null> {
   return { city, state, source: 'zippopotam' };
 }
 
-async function fetchPostalPincodeInsecure(pin: string): Promise<PinResult | null> {
-  const data = await new Promise<any>((resolve, reject) => {
-    https
-      .get(
-        `https://api.postalpincode.in/pincode/${pin}`,
-        { agent: new https.Agent({ rejectUnauthorized: false }) },
-        (res) => {
-          let raw = '';
-          res.on('data', (chunk) => {
-            raw += chunk;
-          });
-          res.on('end', () => {
-            try {
-              resolve(JSON.parse(raw));
-            } catch (err) {
-              reject(err);
-            }
-          });
-        }
-      )
-      .on('error', reject);
-  });
-
-  const postOffice = data?.[0]?.PostOffice?.[0];
-  const city = String(postOffice?.District || '').trim();
-  const state = String(postOffice?.State || '').trim();
-  if (!city || !state) return null;
-  return { city, state, source: 'postalpincode.in(insecure-fallback)' };
+function jsonHeaders(cacheControl: string) {
+  return {
+    'Cache-Control': cacheControl,
+    'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet',
+    'Content-Type': 'application/json; charset=utf-8',
+  };
 }
 
 export async function GET(_: Request, { params }: { params: { pin: string } }) {
   const pin = String(params?.pin || '').trim();
   if (!isValidPin(pin)) {
-    return NextResponse.json({ ok: false, error: 'PIN must be 6 digits.' }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, error: 'PIN must be 6 digits.' },
+      { status: 400, headers: jsonHeaders('no-store') }
+    );
   }
 
   try {
     const primary = await fetchZippopotam(pin);
-    if (primary) return NextResponse.json({ ok: true, ...primary });
+    if (primary) {
+      return NextResponse.json(
+        { ok: true, data: primary },
+        { status: 200, headers: jsonHeaders('public, s-maxage=604800, stale-while-revalidate=86400') }
+      );
+    }
   } catch {
-    // fall through to fallback
-  }
-
-  try {
-    const fallback = await fetchPostalPincodeInsecure(pin);
-    if (fallback) return NextResponse.json({ ok: true, ...fallback });
-  } catch {
-    // ignore
+    // ignore and return service-unavailable response below
   }
 
   return NextResponse.json(
     { ok: false, error: 'Unable to verify PIN from providers right now.' },
-    { status: 502 }
+    { status: 502, headers: jsonHeaders('no-store') }
   );
 }
-

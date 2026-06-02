@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { ShoppingBag, Minus, Plus, Trash2, ArrowRight, Tag } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
@@ -37,9 +38,18 @@ export default function CartPage() {
             <div className="grid lg:grid-cols-3 gap-8">
               {/* Items */}
               <div className="lg:col-span-2 space-y-4">
+                <h2 className="sr-only">Cart Items</h2>
                 {items.map(item => (
                   <div key={item.id} className="bg-white rounded-2xl p-4 shadow-sm flex gap-4">
-                    <img src={item.image} alt={item.name} className="w-24 h-24 rounded-xl object-cover shrink-0" />
+                    <Image
+                      src={item.image}
+                      alt={`${item.name} in cart`}
+                      width={96}
+                      height={96}
+                      loading="lazy"
+                      sizes="96px"
+                      className="w-24 h-24 rounded-xl object-cover shrink-0"
+                    />
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-sage-600 font-body uppercase tracking-wide mb-0.5">{item.category}</p>
                       <h3 className="font-display text-base text-cocoa-800 leading-snug mb-1">{item.name}</h3>

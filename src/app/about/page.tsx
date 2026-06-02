@@ -1,8 +1,11 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Heart, Leaf, Shield, Star, Users, Award, Baby, ShoppingBag } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import JsonLd from '@/components/seo/JsonLd';
+import { breadcrumbSchema } from '@/lib/seo';
 
 const TEAM = [
   { name: 'Anjali Mehta', role: 'Founder & CEO', img: 'https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=300&q=80' },
@@ -28,6 +31,12 @@ const MILESTONES = [
 export default function AboutPage() {
   return (
     <>
+      <JsonLd
+        data={breadcrumbSchema([
+          { name: 'Home', path: '/' },
+          { name: 'About', path: '/about' },
+        ])}
+      />
       <Header />
       <main className="bg-cream-50">
         {/* Hero */}
@@ -109,9 +118,13 @@ export default function AboutPage() {
               </div>
               <div className="relative">
                 <div className="absolute inset-4 bg-blush-200/30 rounded-3xl rotate-3" />
-                <img
+                <Image
                   src="https://images.unsplash.com/photo-1555252333-9f8e92e65df9?w=700&q=80"
-                  alt="Baby with products"
+                  alt="Baby surrounded by curated Kedos baby products"
+                  width={700}
+                  height={525}
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
                   className="relative rounded-3xl shadow-xl w-full object-cover aspect-[4/3]"
                 />
                 <div className="absolute -bottom-6 -left-6 bg-white rounded-2xl shadow-xl p-4 flex items-center gap-3">
@@ -178,7 +191,15 @@ export default function AboutPage() {
               {TEAM.map(t => (
                 <div key={t.name} className="text-center group">
                   <div className="w-32 h-32 mx-auto rounded-full overflow-hidden mb-4 ring-4 ring-cream-200 group-hover:ring-blush-300 transition-all">
-                    <img src={t.img} alt={t.name} className="w-full h-full object-cover" />
+                    <Image
+                      src={t.img}
+                      alt={`${t.name}, ${t.role} at Kedos`}
+                      width={300}
+                      height={300}
+                      loading="lazy"
+                      sizes="128px"
+                      className="w-full h-full object-cover"
+                    />
                   </div>
                   <h3 className="font-display text-lg text-cocoa-800">{t.name}</h3>
                   <p className="text-sm text-cocoa-700/60 font-body">{t.role}</p>

@@ -1,11 +1,13 @@
 'use client';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useEffect, useMemo, useState } from 'react';
 import { Mail, Phone, MapPin, ShieldCheck, Leaf, Truck } from 'lucide-react';
 import { subscribeCategories } from '@/lib/categories';
 import { isEmailSubscribed, subscribeEmail } from '@/lib/subscribers';
 import { subscribeAuth } from '@/lib/auth';
 import { User as FirebaseUser } from 'firebase/auth';
+import { toSlug } from '@/lib/slug';
 
 export default function Footer() {
   const [categories, setCategories] = useState<string[]>([]);
@@ -77,7 +79,7 @@ export default function Footer() {
       <div className="bg-blush-500">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col md:flex-row items-start md:items-center gap-6 justify-between">
           <div className="w-full md:w-auto text-left">
-            <h3 className="font-display text-xl sm:text-2xl text-white">Join Our Little Village</h3>
+            <p className="font-display text-xl sm:text-2xl text-white">Join Our Little Village</p>
             <p className="text-white/80 text-sm mt-1 font-body">Get exclusive deals, parenting tips and new arrivals straight to your inbox.</p>
           </div>
           <div className="flex w-full md:w-auto flex-col sm:flex-row gap-2">
@@ -103,7 +105,15 @@ export default function Footer() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-16 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10">
         <div>
           <div className="flex items-center gap-2 mb-4">
-            <img src="/Images/Logo.png" className="h-14 w-auto" alt="Kedos logo" />
+            <Image
+              src="/Images/Logo.png"
+              alt="Kedos baby products logo"
+              width={112}
+              height={56}
+              loading="lazy"
+              sizes="112px"
+              className="h-14 w-auto"
+            />
           </div>
           <p className="text-cream-200/70 text-sm leading-relaxed font-body">
             Lovingly curated baby products designed for safety, comfort, and joy. Every product is tested and trusted by parents.
@@ -111,11 +121,11 @@ export default function Footer() {
         </div>
 
         <div>
-          <h4 className="font-display text-base mb-4">Shop</h4>
+          <p className="font-display text-base mb-4">Shop</p>
           <ul className="space-y-2.5">
             {footerCategories.map((item) => (
               <li key={item}>
-                <Link href={`/products?category=${encodeURIComponent(item)}`} className="text-cream-200/70 hover:text-blush-400 text-sm transition-colors font-body">
+                <Link href={`/products?category=${encodeURIComponent(toSlug(item))}`} className="text-cream-200/70 hover:text-blush-400 text-sm transition-colors font-body">
                   {item}
                 </Link>
               </li>
@@ -124,7 +134,7 @@ export default function Footer() {
         </div>
 
         <div>
-          <h4 className="font-display text-base mb-4">Help</h4>
+          <p className="font-display text-base mb-4">Help</p>
           <ul className="space-y-2.5">
             {[
               { label: 'FAQ', href: '/faq' },
@@ -142,7 +152,7 @@ export default function Footer() {
         </div>
 
         <div>
-          <h4 className="font-display text-base mb-4">Contact</h4>
+          <p className="font-display text-base mb-4">Contact</p>
           <ul className="space-y-4">
             <li className="flex items-start gap-3 text-cream-200/70 text-sm font-body">
               <MapPin size={16} className="text-blush-400 mt-0.5 shrink-0" />

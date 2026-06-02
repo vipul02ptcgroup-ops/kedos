@@ -4,6 +4,12 @@ import { randomUUID } from 'crypto';
 
 export const runtime = 'nodejs';
 
+const JSON_HEADERS = {
+  'Cache-Control': 'no-store',
+  'X-Robots-Tag': 'noindex, nofollow, noarchive, nosnippet',
+  'Content-Type': 'application/json; charset=utf-8',
+};
+
 async function saveToBucket(
   bucket: any,
   objectPath: string,
@@ -32,16 +38,16 @@ export async function POST(req: Request) {
     const file = form.get('file');
 
     if (!(file instanceof File)) {
-      return NextResponse.json({ error: 'No file uploaded.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'No file uploaded.' }, { status: 400, headers: JSON_HEADERS });
     }
 
     if (!file.type.startsWith('image/')) {
-      return NextResponse.json({ error: 'Only image files are allowed.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'Only image files are allowed.' }, { status: 400, headers: JSON_HEADERS });
     }
 
     const maxBytes = 10 * 1024 * 1024;
     if (file.size > maxBytes) {
-      return NextResponse.json({ error: 'File is too large. Max 10MB.' }, { status: 400 });
+      return NextResponse.json({ ok: false, error: 'File is too large. Max 10MB.' }, { status: 400, headers: JSON_HEADERS });
     }
 
     const safeName = file.name.replace(/[^a-zA-Z0-9.-]/g, '-');
@@ -49,30 +55,31 @@ export async function POST(req: Request) {
     const buffer = Buffer.from(await file.arrayBuffer());
     const url = await saveToBucket(adminStorage, objectPath, file.type, buffer);
 
-    return NextResponse.json({ url });
+    return NextResponse.json({ ok: true, data: { url } }, { status: 200, headers: JSON_HEADERS });
   } catch (error: any) {
     const msg = String(error?.message || 'Upload failed.');
     const code = error?.code ? String(error.code) : '';
     if (msg.includes("Cannot find module 'firebase-admin")) {
       return NextResponse.json(
-        { error: "Server dependency missing: install 'firebase-admin' and restart." },
-        { status: 500 }
+        { ok: false, error: "Server dependency missing: install 'firebase-admin' and restart." },
+        { status: 500, headers: JSON_HEADERS }
       );
     }
     if (msg.includes('Missing Firebase Admin env vars')) {
       return NextResponse.json(
-        { error: msg.replace('Missing Firebase Admin env vars', 'Missing server env vars') },
-        { status: 500 }
+        { ok: false, error: msg.replace('Missing Firebase Admin env vars', 'Missing server env vars') },
+        { status: 500, headers: JSON_HEADERS }
       );
     }
     if (msg.includes('No working Firebase Storage bucket found')) {
-      return NextResponse.json({ error: msg }, { status: 500 });
+      return NextResponse.json({ ok: false, error: msg }, { status: 500, headers: JSON_HEADERS });
     }
     return NextResponse.json(
       {
+        ok: false,
         error: code ? `${msg} (code: ${code})` : msg,
       },
-      { status: 500 }
+      { status: 500, headers: JSON_HEADERS }
     );
   }
 }

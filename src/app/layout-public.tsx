@@ -1,9 +1,11 @@
 'use client';
 import { useState } from 'react';
+import dynamic from 'next/dynamic';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import CartDrawer from '@/components/cart/CartDrawer';
 import { CartItem } from '@/lib/data';
+
+const CartDrawer = dynamic(() => import('@/components/cart/CartDrawer'), { ssr: false });
 
 export default function PublicLayout({ children }: { children: React.ReactNode }) {
   const [cartOpen, setCartOpen] = useState(false);

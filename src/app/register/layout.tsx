@@ -5,6 +5,7 @@ export const metadata = createMetadata({
   description: 'Create your Kedos account.',
   path: '/register',
   noIndex: true,
+  keywords: ['register', 'create account'],
 });
 
 export default function RegisterLayout({ children }: { children: React.ReactNode }) {

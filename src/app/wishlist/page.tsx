@@ -1,11 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { Heart, ShoppingBag } from 'lucide-react';
 import { Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import CartDrawer from '@/components/cart/CartDrawer';
 import Link from 'next/link';
 import { subscribeProducts } from '@/lib/products';
 import { subscribeAuth } from '@/lib/auth';
@@ -13,6 +13,8 @@ import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } fr
 import { User as FirebaseUser } from 'firebase/auth';
 import { useCart } from '@/lib/cart';
 import { trackCartInterest } from '@/lib/cartInterest';
+
+const CartDrawer = dynamic(() => import('@/components/cart/CartDrawer'), { ssr: false });
 
 export default function WishlistPage() {
   const [products, setProducts] = useState<Product[]>([]);
@@ -78,8 +80,11 @@ export default function WishlistPage() {
               </Link>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+            <div>
+              <h2 className="sr-only">Wishlist Items</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
               {wishlist.map(p => <ProductCard key={p.id} product={p} onAddToCart={addToCart} isWishlisted={wishlistIds.includes(p.id)} onToggleWishlist={toggleWishlist} />)}
+              </div>
             </div>
           )}
         </div>

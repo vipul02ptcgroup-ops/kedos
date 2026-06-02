@@ -58,6 +58,12 @@ export async function getAdminStorageBucket() {
   return storageApi.getStorage(adminApp).bucket();
 }
 
+export async function getAdminDb() {
+  const adminApp = await initAdmin();
+  const firestoreApi = await import('firebase-admin/firestore');
+  return firestoreApi.getFirestore(adminApp);
+}
+
 export async function resolveWorkingStorageBucket() {
   const adminApp = await initAdmin();
   const storageApi = await import('firebase-admin/storage');

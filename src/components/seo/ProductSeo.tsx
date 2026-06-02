@@ -46,42 +46,6 @@ export default function ProductSeo({ product }: { product: Product }) {
     upsertMeta('meta[name="twitter:title"]', { name: 'twitter:title', content: title });
     upsertMeta('meta[name="twitter:description"]', { name: 'twitter:description', content: description });
     if (image) upsertMeta('meta[name="twitter:image"]', { name: 'twitter:image', content: image });
-
-    const scriptId = 'product-json-ld';
-    document.getElementById(scriptId)?.remove();
-    const script = document.createElement('script');
-    script.id = scriptId;
-    script.type = 'application/ld+json';
-    script.text = JSON.stringify({
-      '@context': 'https://schema.org',
-      '@type': 'Product',
-      name: product.name,
-      description,
-      image: product.images?.length ? product.images : [product.image].filter(Boolean),
-      sku: product.id,
-      category: product.category,
-      brand: {
-        '@type': 'Brand',
-        name: 'Kedos',
-      },
-      aggregateRating: product.reviews
-        ? {
-            '@type': 'AggregateRating',
-            ratingValue: product.rating || 0,
-            reviewCount: product.reviews,
-          }
-        : undefined,
-      offers: {
-        '@type': 'Offer',
-        url,
-        priceCurrency: 'INR',
-        price: product.price,
-        availability: product.inStock
-          ? 'https://schema.org/InStock'
-          : 'https://schema.org/OutOfStock',
-      },
-    });
-    document.head.appendChild(script);
   }, [product]);
 
   return null;

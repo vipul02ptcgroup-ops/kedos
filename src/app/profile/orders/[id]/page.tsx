@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useParams } from 'next/navigation';
 import { CheckCircle, Package, Truck, Home, ArrowLeft } from 'lucide-react';
 import Header from '@/components/layout/Header';
@@ -105,7 +106,15 @@ export default function ProfileOrderDetailsPage() {
                 <div className="space-y-3">
                   {order.items.map((item) => (
                     <div key={`${item.productId}-${item.name}`} className="flex items-center gap-3">
-                      <img src={item.image} alt={item.name} className="w-14 h-14 rounded-xl object-cover" />
+                      <Image
+                        src={item.image}
+                        alt={`${item.name} ordered product`}
+                        width={56}
+                        height={56}
+                        loading="lazy"
+                        sizes="56px"
+                        className="w-14 h-14 rounded-xl object-cover"
+                      />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-cocoa-800">{item.name}</p>
                         <p className="text-xs text-cocoa-700/50">Qty: {item.quantity}</p>

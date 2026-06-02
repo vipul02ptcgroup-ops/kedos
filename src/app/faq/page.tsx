@@ -2,6 +2,8 @@
 import { HelpCircle, ShieldCheck, Truck, RotateCcw, CreditCard, PackageCheck } from 'lucide-react';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
+import JsonLd from '@/components/seo/JsonLd';
+import { breadcrumbSchema, faqSchema } from '@/lib/seo';
 
 const FAQS = [
   {
@@ -34,6 +36,15 @@ const FAQS = [
 export default function FaqPage() {
   return (
     <>
+      <JsonLd
+        data={[
+          breadcrumbSchema([
+            { name: 'Home', path: '/' },
+            { name: 'FAQ', path: '/faq' },
+          ]),
+          faqSchema(FAQS),
+        ]}
+      />
       <Header />
       <main className="bg-cream-50 min-h-screen">
         <section className="bg-cocoa-800 py-16">
@@ -66,4 +77,3 @@ export default function FaqPage() {
     </>
   );
 }
-

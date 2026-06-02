@@ -5,6 +5,7 @@ export const metadata = createMetadata({
   description: 'Review your Kedos shopping cart.',
   path: '/cart',
   noIndex: true,
+  keywords: ['shopping cart', 'checkout cart'],
 });
 
 export default function CartLayout({ children }: { children: React.ReactNode }) {

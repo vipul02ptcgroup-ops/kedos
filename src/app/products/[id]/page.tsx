@@ -1,24 +1,28 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import Image from 'next/image';
+import dynamic from 'next/dynamic';
+import { useParams, useRouter } from 'next/navigation';
 import { ShoppingBag, Heart, Star, Shield, Leaf, Truck, ChevronRight, ChevronLeft, Minus, Plus, Check, TicketPercent } from 'lucide-react';
 import { Product } from '@/lib/data';
 import ProductCard from '@/components/product/ProductCard';
 import Header from '@/components/layout/Header';
 import Footer from '@/components/layout/Footer';
-import CartDrawer from '@/components/cart/CartDrawer';
 import { subscribeProducts } from '@/lib/products';
-import ProductSeo from '@/components/seo/ProductSeo';
+import JsonLd from '@/components/seo/JsonLd';
 import { subscribeAuth } from '@/lib/auth';
 import { addToWishlist, removeFromWishlist, subscribeUserWishlistProductIds } from '@/lib/wishlist';
 import { User as FirebaseUser } from 'firebase/auth';
-import { toSlug } from '@/lib/slug';
+import { getProductSlug, toSlug } from '@/lib/slug';
 import { createReview, subscribeProductReviews, type ProductReview } from '@/lib/reviews';
 import { subscribeOrdersForUserIdentity, type FirestoreOrder } from '@/lib/orders';
 import { useCart } from '@/lib/cart';
 import { trackCartInterest } from '@/lib/cartInterest';
 import { subscribeActiveCouponsForProduct, type CouponDoc } from '@/lib/coupons';
+import { breadcrumbSchema, productSchema } from '@/lib/seo';
+
+const CartDrawer = dynamic(() => import('@/components/cart/CartDrawer'), { ssr: false });
 
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -31,6 +35,7 @@ function readFileAsDataURL(file: File): Promise<string> {
 
 export default function ProductDetailPage() {
   const params = useParams();
+  const router = useRouter();
   const routeValue = Array.isArray(params?.id) ? params.id[0] : params?.id;
   const routeKey = String(routeValue || '');
   const [products, setProducts] = useState<Product[]>([]);
@@ -116,6 +121,14 @@ export default function ProductDetailPage() {
     if (!product) return;
     setActiveImageIndex(0);
   }, [product?.id]);
+
+  useEffect(() => {
+    if (!product) return;
+    const canonicalSlug = getProductSlug(product);
+    if (routeKey && routeKey !== canonicalSlug) {
+      router.replace(`/products/${canonicalSlug}`, { scroll: false });
+    }
+  }, [product, routeKey, router]);
 
   useEffect(() => {
     if (galleryImages.length < 2) return;
@@ -242,7 +255,18 @@ export default function ProductDetailPage() {
 
   return (
     <>
-      <ProductSeo product={product} />
+      {product && (
+        <JsonLd
+          data={[
+            breadcrumbSchema([
+              { name: 'Home', path: '/' },
+              { name: 'Products', path: '/products' },
+              { name: product.name, path: `/products/${getProductSlug(product)}` },
+            ]),
+            productSchema(product),
+          ]}
+        />
+      )}
       <Header cartCount={cartCount} onCartOpen={() => setCartOpen(true)} />
       <main className="min-h-screen bg-white">
         {/* Breadcrumb */}
@@ -262,7 +286,14 @@ export default function ProductDetailPage() {
             {/* Images */}
             <div className="lg:sticky lg:top-24 self-start">
               <div className="relative aspect-square rounded-3xl overflow-hidden bg-cream-100 shadow-md group">
-                <img src={activeImage} alt={product.name} className="w-full h-full object-cover transition-opacity duration-500" />
+                <Image
+                  src={activeImage}
+                  alt={`${product.name} - product image ${activeImageIndex + 1}`}
+                  fill
+                  priority
+                  sizes="(max-width: 1024px) 100vw, 50vw"
+                  className="w-full h-full object-cover transition-opacity duration-500"
+                />
                 {galleryImages.length > 1 && (
                   <>
                     <button
@@ -304,7 +335,15 @@ export default function ProductDetailPage() {
                     className={`h-20 w-20 shrink-0 overflow-hidden rounded-xl border-2 bg-cream-100 transition-colors sm:h-24 sm:w-24 ${index === activeImageIndex ? 'border-blush-400' : 'border-transparent hover:border-cream-300'}`}
                     aria-label={`Show product image ${index + 1}`}
                   >
-                    <img src={img} alt="" className="w-full h-full object-cover" />
+                    <Image
+                      src={img}
+                      alt={`${product.name} thumbnail ${index + 1}`}
+                      width={96}
+                      height={96}
+                      loading="lazy"
+                      sizes="96px"
+                      className="w-full h-full object-cover"
+                    />
                   </button>
                 ))}
               </div>
@@ -545,7 +584,15 @@ export default function ProductDetailPage() {
                         <div className="flex gap-2 mb-3">
                           {reviewForm.images.map((img) => (
                             <div key={img} className="relative">
-                              <img src={img} alt="" className="w-16 h-16 rounded-lg object-cover border border-cream-200" />
+                              <Image
+                                src={img}
+                                alt={`Review image preview for ${product.name}`}
+                                width={64}
+                                height={64}
+                                loading="lazy"
+                                sizes="64px"
+                                className="w-16 h-16 rounded-lg object-cover border border-cream-200"
+                              />
                               <button
                                 type="button"
                                 onClick={() => setReviewForm((prev) => ({ ...prev, images: prev.images.filter((x) => x !== img) }))}
@@ -585,7 +632,16 @@ export default function ProductDetailPage() {
                           {!!r.images?.length && (
                             <div className="flex gap-2 mt-3">
                               {r.images.map((img) => (
-                                <img key={img} src={img} alt="" className="w-16 h-16 rounded-lg object-cover border border-cream-200" />
+                                <Image
+                                  key={img}
+                                  src={img}
+                                  alt={`Customer review image for ${product.name}`}
+                                  width={64}
+                                  height={64}
+                                  loading="lazy"
+                                  sizes="64px"
+                                  className="w-16 h-16 rounded-lg object-cover border border-cream-200"
+                                />
                               ))}
                             </div>
                           )}

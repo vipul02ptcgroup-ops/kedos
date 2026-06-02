@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { ChevronRight, Shield, Truck, Tag, CreditCard, Smartphone, IndianRupee  } from 'lucide-react';
 import Header from '@/components/layout/Header';
@@ -169,8 +170,8 @@ export default function CheckoutPage() {
           return;
         }
 
-        const city = String(data?.city || '').trim();
-        const state = String(data?.state || '').trim();
+        const city = String(data?.data?.city || '').trim();
+        const state = String(data?.data?.state || '').trim();
         if (!city || !state) {
           setIsPinValid(false);
           setPinError('Could not fetch city/state for this PIN. Please use another PIN.');
@@ -560,7 +561,15 @@ export default function CheckoutPage() {
                   {sampleItems.map(item => (
                     <div key={item.id} className="flex gap-3">
                       <div className="relative">
-                        <img src={item.image} alt={item.name} className="w-14 h-14 rounded-lg object-cover" />
+                        <Image
+                          src={item.image}
+                          alt={`${item.name} in checkout summary`}
+                          width={56}
+                          height={56}
+                          loading="lazy"
+                          sizes="56px"
+                          className="w-14 h-14 rounded-lg object-cover"
+                        />
                         <span className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-blush-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center font-body">
                           {item.quantity}
                         </span>
