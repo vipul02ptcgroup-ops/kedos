@@ -1,6 +1,6 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Edit2, Trash2, Eye, ChevronDown, Star, Upload, X } from 'lucide-react';
+import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { Plus, Search, Edit2, Trash2, Eye, ChevronDown, Star, Upload, X, FileJson } from 'lucide-react';
 import { Product } from '@/lib/data';
 import AdminLayout from '@/components/admin/AdminLayout';
 import Link from 'next/link';
@@ -35,6 +35,233 @@ function normalizeImageUrl(value: string) {
   return raw;
 }
 
+type ImportStatus = {
+  tone: 'success' | 'error' | 'warning';
+  message: string;
+  details?: string[];
+};
+
+type ProductImportCandidate = Omit<Product, 'id'>;
+type ImportSummary = {
+  totalProductsFound: number;
+  successfullyAdded: number;
+  skippedDuplicates: number;
+  failedProducts: number;
+  imageUploadFailures: number;
+};
+
+const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
+
+function normalizeProductName(value: unknown) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function validateImportedProduct(input: unknown): { product?: ProductImportCandidate; errors: string[] } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { errors: ['Entry must be a product object.'] };
+  }
+
+  const record = input as Record<string, unknown>;
+  const name = String(record.name || '').trim();
+  const category = String(record.category || '').trim();
+  const description = String(record.description || '').trim();
+  const price = Number(record.price);
+  const rating = Number(record.rating);
+  const reviews = Number(record.reviews);
+  const inStock = record.inStock;
+
+  const errors: string[] = [];
+
+  if (!name) errors.push('name is required');
+  if (!Number.isFinite(price) || price < 0) errors.push('price must be a valid non-negative number');
+  if (!category) errors.push('category is required');
+  if (!description) errors.push('description is required');
+  if (!Number.isFinite(rating) || rating < 0 || rating > 5) errors.push('rating must be between 0 and 5');
+  if (!Number.isFinite(reviews) || reviews < 0) errors.push('reviews must be a valid non-negative number');
+  if (typeof inStock !== 'boolean') errors.push('inStock must be true or false');
+
+  const originalPriceRaw = record.originalPrice;
+  const originalPrice =
+    originalPriceRaw === undefined || originalPriceRaw === null || String(originalPriceRaw).trim() === ''
+      ? undefined
+      : Number(originalPriceRaw);
+  if (originalPrice !== undefined && (!Number.isFinite(originalPrice) || originalPrice < 0)) {
+    errors.push('originalPrice must be a valid non-negative number when provided');
+  }
+
+  const featuresRaw = record.features;
+  const features = Array.isArray(featuresRaw)
+    ? featuresRaw.map((item) => String(item).trim()).filter(Boolean)
+    : featuresRaw === undefined
+      ? []
+      : null;
+  if (featuresRaw !== undefined && !Array.isArray(featuresRaw)) {
+    errors.push('features must be an array of strings when provided');
+  }
+
+  const imagesRaw = record.images;
+  const mainImage = normalizeImageUrl(String(record.image || '').trim());
+  const images = Array.isArray(imagesRaw)
+    ? imagesRaw.map((item) => normalizeImageUrl(String(item).trim())).filter(Boolean)
+    : imagesRaw === undefined
+      ? []
+      : null;
+  if (imagesRaw !== undefined && !Array.isArray(imagesRaw)) {
+    errors.push('images must be an array of strings when provided');
+  }
+  const normalizedImages = [mainImage, ...(images || [])].filter(Boolean).filter((value, index, arr) => arr.indexOf(value) === index);
+  if (!normalizedImages.length) errors.push('image or images is required');
+
+  if (record.badge !== undefined && typeof record.badge !== 'string') {
+    errors.push('badge must be a string when provided');
+  }
+
+  if (record.ageRange !== undefined && typeof record.ageRange !== 'string') {
+    errors.push('ageRange must be a string when provided');
+  }
+
+  if (record.newArrival !== undefined && typeof record.newArrival !== 'boolean') {
+    errors.push('newArrival must be true or false when provided');
+  }
+
+  if (errors.length) return { errors };
+
+  return {
+    errors: [],
+    product: {
+      name,
+      price,
+      originalPrice,
+      category,
+      image: normalizedImages[0],
+      images: normalizedImages,
+      rating,
+      reviews,
+      badge: record.badge ? String(record.badge).trim() : undefined,
+      description,
+      features: features || [],
+      ageRange: record.ageRange ? String(record.ageRange).trim() : undefined,
+      inStock: Boolean(inStock),
+      newArrival: typeof record.newArrival === 'boolean' ? record.newArrival : false,
+    },
+  };
+}
+
+function summarizeImportNames(names: string[]) {
+  if (!names.length) return '';
+  const preview = names.slice(0, 3).join(', ');
+  const remaining = names.length - 3;
+  return remaining > 0 ? `${preview} +${remaining} more` : preview;
+}
+
+function getImageExtension(value: string) {
+  const normalized = normalizeImageUrl(value);
+  if (!normalized) return '';
+
+  try {
+    const url = new URL(normalized, 'https://dummy.local');
+    const cleanPath = url.pathname.toLowerCase();
+    if (!cleanPath.includes('.')) return '';
+    return cleanPath.split('.').pop() || '';
+  } catch {
+    return '';
+  }
+}
+
+function isSupportedImageValue(value: string) {
+  const normalized = normalizeImageUrl(value);
+  if (!normalized) return false;
+  const extension = getImageExtension(normalized);
+  return !extension || ALLOWED_IMAGE_EXTENSIONS.has(extension);
+}
+
+function isFirebaseHostedImage(value: string) {
+  const normalized = normalizeImageUrl(value).toLowerCase();
+  return (
+    normalized.startsWith('gs://') ||
+    normalized.includes('firebasestorage.googleapis.com/') ||
+    normalized.includes('.firebasestorage.app/') ||
+    normalized.includes('storage.googleapis.com/')
+  );
+}
+
+async function uploadImageFromUrl(imageUrl: string) {
+  const response = await fetch('/api/admin/upload-product-image', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ imageUrl }),
+  });
+  const raw = await response.text();
+  let data: any = null;
+  try {
+    data = raw ? JSON.parse(raw) : null;
+  } catch {
+    data = null;
+  }
+
+  if (!response.ok || !data?.ok || !data?.data?.url) {
+    throw new Error(data?.error || `Image upload failed (HTTP ${response.status}).`);
+  }
+
+  return data.data.url as string;
+}
+
+async function resolveImportedImageUrl(imageUrl: string) {
+  const normalized = normalizeImageUrl(imageUrl);
+  if (!normalized) throw new Error('Image URL is empty.');
+  if (!isSupportedImageValue(normalized)) {
+    throw new Error('Unsupported image format. Only JPG, JPEG, PNG, and WEBP are allowed.');
+  }
+  if (
+    normalized.startsWith('/') ||
+    normalized.startsWith('gs://') ||
+    isFirebaseHostedImage(normalized) ||
+    !/^https?:\/\//i.test(normalized)
+  ) {
+    return normalized;
+  }
+  return uploadImageFromUrl(normalized);
+}
+
+async function resolveImportedProductImages(product: ProductImportCandidate) {
+  const sourceImages = (product.images?.length ? product.images : [product.image]).filter(Boolean);
+  const imageFailures: string[] = [];
+  const resolvedImages: string[] = [];
+
+  for (const imageUrl of sourceImages) {
+    try {
+      const resolved = await resolveImportedImageUrl(imageUrl);
+      resolvedImages.push(resolved);
+    } catch (error: any) {
+      const message = error?.message || 'Image processing failed.';
+      imageFailures.push(`${product.name}: ${imageUrl} - ${message}`);
+    }
+  }
+
+  if (!resolvedImages.length) {
+    throw new Error('No valid images remained after image processing.');
+  }
+
+  return {
+    product: {
+      ...product,
+      image: resolvedImages[0],
+      images: resolvedImages,
+    },
+    imageFailures,
+  };
+}
+
+function buildImportSummaryLines(summary: ImportSummary) {
+  return [
+    `Total products found: ${summary.totalProductsFound}`,
+    `Successfully added: ${summary.successfullyAdded}`,
+    `Skipped duplicates: ${summary.skippedDuplicates}`,
+    `Failed products: ${summary.failedProducts}`,
+    `Image upload failures: ${summary.imageUploadFailures}`,
+  ];
+}
+
 export default function AdminProductsPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
@@ -46,6 +273,9 @@ export default function AdminProductsPage() {
   const [form, setForm] = useState<Omit<Product, 'id'>>(emptyProduct);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [jsonImporting, setJsonImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
+  const jsonInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const unsub = subscribeProducts((rows) => {
@@ -187,6 +417,142 @@ export default function AdminProductsPage() {
     });
   };
 
+  const openJsonPicker = () => {
+    if (jsonImporting) return;
+    setImportStatus(null);
+    jsonInputRef.current?.click();
+  };
+
+  const onJsonUpload = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+
+    setJsonImporting(true);
+    setImportStatus(null);
+
+    try {
+      const raw = await file.text();
+      const parsed = JSON.parse(raw);
+      const entries = Array.isArray(parsed) ? parsed : [parsed];
+      const summary: ImportSummary = {
+        totalProductsFound: entries.length,
+        successfullyAdded: 0,
+        skippedDuplicates: 0,
+        failedProducts: 0,
+        imageUploadFailures: 0,
+      };
+
+      if (!entries.length) {
+        setImportStatus({ tone: 'error', message: 'The uploaded JSON file is empty.' });
+        return;
+      }
+
+      const validProducts: ProductImportCandidate[] = [];
+      const failedProducts: string[] = [];
+      const imageFailures: string[] = [];
+
+      entries.forEach((entry, index) => {
+        const { product, errors } = validateImportedProduct(entry);
+        if (!product) {
+          failedProducts.push(`Item ${index + 1}: ${errors.join(', ')}`);
+          return;
+        }
+        validProducts.push(product);
+      });
+      summary.failedProducts = failedProducts.length;
+
+      const existingNames = new Set(products.map((product) => normalizeProductName(product.name)));
+      const acceptedNames = new Set<string>();
+      const duplicateProducts: ProductImportCandidate[] = [];
+      const importQueue: ProductImportCandidate[] = [];
+
+      validProducts.forEach((product) => {
+        const normalizedName = normalizeProductName(product.name);
+        const isDuplicate = existingNames.has(normalizedName) || acceptedNames.has(normalizedName);
+
+        if (isDuplicate) {
+          duplicateProducts.push(product);
+          return;
+        }
+
+        acceptedNames.add(normalizedName);
+        importQueue.push(product);
+      });
+
+      const duplicateNames = duplicateProducts.map((product) => product.name);
+      let skippedDuplicates = duplicateNames.length;
+
+      if (duplicateProducts.length) {
+        const duplicateLabel = summarizeImportNames(duplicateNames);
+        const shouldImportDuplicates = window.confirm(
+          `Duplicate product name(s) found: ${duplicateLabel}. Click OK to import them anyway, or Cancel to skip duplicates.`
+        );
+
+        if (shouldImportDuplicates) {
+          importQueue.push(...duplicateProducts);
+          skippedDuplicates = 0;
+        }
+      }
+      summary.skippedDuplicates = skippedDuplicates;
+
+      if (!importQueue.length) {
+        setImportStatus({
+          tone: failedProducts.length || skippedDuplicates ? 'warning' : 'error',
+          message: ['No products were imported.', ...buildImportSummaryLines(summary)].join('\n'),
+          details: failedProducts.slice(0, 8),
+        });
+        return;
+      }
+
+      const actor = getAdminActorSnapshot();
+      for (const product of importQueue) {
+        try {
+          const resolved = await resolveImportedProductImages(product);
+          if (resolved.imageFailures.length) {
+            imageFailures.push(...resolved.imageFailures);
+          }
+
+          const createdId = await saveProduct(resolved.product);
+          await createAdminLog({
+            action: 'product_created',
+            ...actor,
+            targetUid: createdId,
+            targetEmail: '',
+            details: `${product.name} (${product.category}) via JSON upload`,
+          });
+          summary.successfullyAdded += 1;
+        } catch (error: any) {
+          summary.failedProducts += 1;
+          failedProducts.push(`${product.name}: ${error?.message || 'Product import failed.'}`);
+        }
+      }
+      summary.imageUploadFailures = imageFailures.length;
+
+      const detailLines = [...failedProducts, ...imageFailures].slice(0, 10);
+      const hasWarnings = summary.skippedDuplicates > 0 || summary.failedProducts > 0 || summary.imageUploadFailures > 0;
+      setImportStatus({
+        tone: hasWarnings ? 'warning' : 'success',
+        message: [
+          summary.successfullyAdded ? 'JSON import completed.' : 'JSON import finished with issues.',
+          ...buildImportSummaryLines(summary),
+        ].join('\n'),
+        details: detailLines,
+      });
+    } catch (error: any) {
+      if (error instanceof SyntaxError) {
+        setImportStatus({ tone: 'error', message: 'Invalid JSON file. Please upload a valid .json file.' });
+      } else {
+        setImportStatus({
+          tone: 'error',
+          message: error?.message || 'JSON import failed. Please try again.',
+        });
+      }
+    } finally {
+      setJsonImporting(false);
+    }
+  };
+
   return (
     <AdminLayout>
       <div className="p-6">
@@ -195,11 +561,52 @@ export default function AdminProductsPage() {
             <h1 className="font-display text-2xl text-slate-800">Products</h1>
             <p className="text-sm text-slate-500 font-body">{products.length} total products</p>
           </div>
-          <button onClick={openForAdd}
-            className="flex items-center gap-2 bg-blush-500 hover:bg-blush-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm font-body transition-colors">
-            <Plus size={16} /> Add Product
-          </button>
+          <div className="flex items-center gap-3">
+            <input
+              ref={jsonInputRef}
+              type="file"
+              accept=".json,application/json"
+              onChange={onJsonUpload}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={openJsonPicker}
+              disabled={jsonImporting}
+              className="flex items-center gap-2 border border-slate-200 bg-white px-5 py-2.5 rounded-xl font-medium text-sm font-body text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <FileJson size={16} /> {jsonImporting ? 'Uploading JSON...' : 'Upload JSON'}
+            </button>
+            <button onClick={openForAdd}
+              className="flex items-center gap-2 bg-blush-500 hover:bg-blush-600 text-white px-5 py-2.5 rounded-xl font-medium text-sm font-body transition-colors">
+              <Plus size={16} /> Add Product
+            </button>
+          </div>
         </div>
+
+        {importStatus && (
+          <div
+            className={[
+              'mb-5 rounded-2xl border px-4 py-3 text-sm font-body',
+              importStatus.tone === 'success'
+                ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+                : importStatus.tone === 'warning'
+                  ? 'border-amber-200 bg-amber-50 text-amber-800'
+                  : 'border-red-200 bg-red-50 text-red-700',
+            ].join(' ')}
+          >
+            <div className="whitespace-pre-line">{importStatus.message}</div>
+            {!!importStatus.details?.length && (
+              <div className="mt-2 space-y-1">
+                {importStatus.details.map((detail) => (
+                  <div key={detail} className="whitespace-pre-line">
+                    {detail}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-4 mb-5 flex flex-col sm:flex-row gap-3">
           <div className="relative flex-1">
