@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { ShoppingBag, Heart, Star } from 'lucide-react';
-import { Product } from '@/lib/data';
+import { Product, getEffectiveProductImage, getEffectiveProductOriginalPrice, getEffectiveProductPrice } from '@/lib/data';
 import { getProductSlug } from '@/lib/slug';
 
 interface ProductCardProps {
@@ -14,8 +14,11 @@ interface ProductCardProps {
 
 export default function ProductCard({ product, onAddToCart, isWishlisted = false, onToggleWishlist }: ProductCardProps) {
   const productPath = `/products/${getProductSlug(product)}`;
-  const discount = product.originalPrice
-    ? Math.round((1 - product.price / product.originalPrice) * 100)
+  const price = getEffectiveProductPrice(product);
+  const originalPrice = getEffectiveProductOriginalPrice(product);
+  const image = getEffectiveProductImage(product);
+  const discount = originalPrice
+    ? Math.round((1 - price / originalPrice) * 100)
     : null;
 
   return (
@@ -26,7 +29,7 @@ export default function ProductCard({ product, onAddToCart, isWishlisted = false
       {/* Image */}
       <div className="relative aspect-square overflow-hidden bg-cream-100">
         <Image
-          src={product.image}
+          src={image}
           alt={`${product.name} in ${product.category}`}
           fill
           sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
@@ -94,9 +97,9 @@ export default function ProductCard({ product, onAddToCart, isWishlisted = false
         {/* Price + Cart */}
         <div className="flex items-center justify-between">
           <div className="flex items-baseline gap-2">
-            <span className="font-display text-lg text-cocoa-800">₹{product.price.toFixed(0)}</span>
-            {product.originalPrice && (
-              <span className="text-sm text-cocoa-700/40 line-through font-body">₹{product.originalPrice.toFixed(0)}</span>
+            <span className="font-display text-lg text-cocoa-800">₹{price.toFixed(0)}</span>
+            {originalPrice && (
+              <span className="text-sm text-cocoa-700/40 line-through font-body">₹{originalPrice.toFixed(0)}</span>
             )}
           </div>
           <button

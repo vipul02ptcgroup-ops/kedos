@@ -11,13 +11,13 @@ export default function PublicLayout({ children }: { children: React.ReactNode }
   const [cartOpen, setCartOpen] = useState(false);
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
 
-  const removeFromCart = (productId: string) => {
-    setCartItems(prev => prev.filter(i => i.id !== productId));
+  const removeFromCart = (cartItemId: string) => {
+    setCartItems(prev => prev.filter(i => i.cartItemId !== cartItemId));
   };
 
-  const updateQty = (productId: string, qty: number) => {
-    if (qty < 1) { removeFromCart(productId); return; }
-    setCartItems(prev => prev.map(i => i.id === productId ? { ...i, quantity: qty } : i));
+  const updateQty = (cartItemId: string, qty: number) => {
+    if (qty < 1) { removeFromCart(cartItemId); return; }
+    setCartItems(prev => prev.map(i => i.cartItemId === cartItemId ? { ...i, quantity: qty } : i));
   };
 
   const cartCount = cartItems.reduce((s, i) => s + i.quantity, 0);

@@ -246,11 +246,16 @@ export default function CheckoutPage() {
     try {
       const orderItems = sampleItems.map((item) => ({
         productId: item.id,
+        cartItemId: item.cartItemId,
         name: item.name,
         image: item.image,
         category: item.category,
         price: item.price,
         quantity: item.quantity,
+        variantId: item.selectedVariant?.id,
+        variantLabel: item.selectedVariant?.label,
+        variantColor: item.selectedVariant?.color,
+        variantSize: item.selectedVariant?.size,
       }));
 
       const { id: orderId, orderCode } = await createOrder({
@@ -559,7 +564,7 @@ export default function CheckoutPage() {
                 <h2 className="font-display text-lg text-cocoa-800 mb-4">Order Summary</h2>
                 <div className="space-y-3 mb-4">
                   {sampleItems.map(item => (
-                    <div key={item.id} className="flex gap-3">
+                    <div key={item.cartItemId} className="flex gap-3">
                       <div className="relative">
                         <Image
                           src={item.image}
@@ -577,6 +582,7 @@ export default function CheckoutPage() {
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium text-cocoa-800 font-body line-clamp-1">{item.name}</p>
                         <p className="text-xs text-cocoa-700/50 font-body">{item.category}</p>
+                        {item.selectedVariant && <p className="text-xs text-cocoa-700/60 font-body">{item.selectedVariant.label}</p>}
                       </div>
                       <span className="text-sm font-display text-cocoa-800 shrink-0">₹{(item.price * item.quantity).toFixed(0)}</span>
                     </div>

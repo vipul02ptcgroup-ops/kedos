@@ -24,6 +24,11 @@ export type OrderItem = {
   category: string;
   price: number;
   quantity: number;
+  cartItemId?: string;
+  variantId?: string;
+  variantLabel?: string;
+  variantColor?: string;
+  variantSize?: string;
 };
 
 export type DeliveryAddress = {

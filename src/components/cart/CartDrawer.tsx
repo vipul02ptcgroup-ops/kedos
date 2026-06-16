@@ -10,8 +10,8 @@ interface CartDrawerProps {
   open: boolean;
   onClose: () => void;
   items: CartItem[];
-  onRemove: (id: string) => void;
-  onUpdateQty: (id: string, qty: number) => void;
+  onRemove: (cartItemId: string) => void;
+  onUpdateQty: (cartItemId: string, qty: number) => void;
 }
 
 export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty }: CartDrawerProps) {
@@ -62,7 +62,7 @@ export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty
               </button>
             </div>
           ) : items.map(item => (
-            <div key={item.id} className="flex gap-3 bg-white rounded-xl p-3 shadow-sm">
+            <div key={item.cartItemId} className="flex gap-3 bg-white rounded-xl p-3 shadow-sm">
               <Image
                 src={item.image}
                 alt={`${item.name} in cart`}
@@ -75,22 +75,25 @@ export default function CartDrawer({ open, onClose, items, onRemove, onUpdateQty
               <div className="flex-1 min-w-0">
                 <h4 className="font-body text-sm font-medium text-cocoa-800 line-clamp-2 leading-snug">{item.name}</h4>
                 <p className="text-xs text-sage-600 font-body mt-0.5">{item.category}</p>
+                {item.selectedVariant && (
+                  <p className="text-xs text-cocoa-700/60 font-body mt-1">{item.selectedVariant.label}</p>
+                )}
                 <div className="flex items-center justify-between mt-2">
                   <span className="font-display text-base text-cocoa-800">₹{(item.price * item.quantity).toFixed(0)}</span>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => onUpdateQty(item.id, item.quantity - 1)}
+                    <button onClick={() => onUpdateQty(item.cartItemId, item.quantity - 1)}
                       className="w-6 h-6 flex items-center justify-center rounded-full bg-cream-200 hover:bg-cream-300 transition-colors">
                       <Minus size={11} />
                     </button>
                     <span className="w-6 text-center text-sm font-medium font-body">{item.quantity}</span>
-                    <button onClick={() => onUpdateQty(item.id, item.quantity + 1)}
+                    <button onClick={() => onUpdateQty(item.cartItemId, item.quantity + 1)}
                       className="w-6 h-6 flex items-center justify-center rounded-full bg-cream-200 hover:bg-cream-300 transition-colors">
                       <Plus size={11} />
                     </button>
                   </div>
                 </div>
               </div>
-              <button onClick={() => onRemove(item.id)} className="self-start text-cocoa-700/30 hover:text-red-400 transition-colors">
+              <button onClick={() => onRemove(item.cartItemId)} className="self-start text-cocoa-700/30 hover:text-red-400 transition-colors">
                 <Trash2 size={14} />
               </button>
             </div>

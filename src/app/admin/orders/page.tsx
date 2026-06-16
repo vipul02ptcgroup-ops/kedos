@@ -285,7 +285,8 @@ export default function AdminOrdersPage() {
         doc.setFont('helvetica', 'normal');
         doc.setFontSize(9);
         doc.text(String(idx + 1), 46, y + 14);
-        doc.text(String(item.name || '-').slice(0, 46), 72, y + 14);
+        const invoiceName = [String(item.name || '-').trim(), String(item.variantLabel || '').trim()].filter(Boolean).join(' - ');
+        doc.text(invoiceName.slice(0, 46), 72, y + 14);
         doc.text(String(item.quantity || 0), 330, y + 14);
         doc.text(formatInvoiceCurrency(Number(item.price || 0)), 390, y + 14);
         doc.text(formatInvoiceCurrency(amount), 500, y + 14, { align: 'right' });
@@ -505,10 +506,11 @@ export default function AdminOrdersPage() {
                     <p className="text-xs text-slate-500 font-body">No item details available.</p>
                   ) : (
                     detailOrder.lineItems.map((item) => (
-                      <div key={`${item.productId}-${item.name}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5">
+                      <div key={item.cartItemId || `${item.productId}-${item.variantId || item.name}`} className="flex items-center gap-3 rounded-xl border border-slate-100 p-2.5">
                         <img src={item.image} alt={item.name} className="w-12 h-12 rounded-lg object-cover" />
                         <div className="flex-1">
                           <p className="text-sm text-slate-800 font-medium font-body">{item.name}</p>
+                          {item.variantLabel && <p className="text-xs text-slate-500 font-body">{item.variantLabel}</p>}
                           <p className="text-xs text-slate-500 font-body">Qty: {item.quantity} x {formatINR(Number(item.price || 0))}</p>
                         </div>
                         <p className="text-sm text-slate-800 font-medium font-body">{formatINR(Number(item.price || 0) * Number(item.quantity || 0))}</p>

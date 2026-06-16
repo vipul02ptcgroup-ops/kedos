@@ -105,7 +105,7 @@ export default function ProfileOrderDetailsPage() {
                 <h2 className="font-display text-lg text-cocoa-800 mb-3">Items</h2>
                 <div className="space-y-3">
                   {order.items.map((item) => (
-                    <div key={`${item.productId}-${item.name}`} className="flex items-center gap-3">
+                    <div key={item.cartItemId || `${item.productId}-${item.variantId || item.name}`} className="flex items-center gap-3">
                       <Image
                         src={item.image}
                         alt={`${item.name} ordered product`}
@@ -117,6 +117,7 @@ export default function ProfileOrderDetailsPage() {
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-cocoa-800">{item.name}</p>
+                        {item.variantLabel && <p className="text-xs text-cocoa-700/60">{item.variantLabel}</p>}
                         <p className="text-xs text-cocoa-700/50">Qty: {item.quantity}</p>
                       </div>
                       <span className="text-sm text-cocoa-800 font-medium">Rs {(item.price * item.quantity).toFixed(0)}</span>

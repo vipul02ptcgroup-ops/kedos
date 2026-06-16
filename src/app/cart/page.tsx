@@ -40,7 +40,7 @@ export default function CartPage() {
               <div className="lg:col-span-2 space-y-4">
                 <h2 className="sr-only">Cart Items</h2>
                 {items.map(item => (
-                  <div key={item.id} className="bg-white rounded-2xl p-4 shadow-sm flex gap-4">
+                  <div key={item.cartItemId} className="bg-white rounded-2xl p-4 shadow-sm flex gap-4">
                     <Image
                       src={item.image}
                       alt={`${item.name} in cart`}
@@ -53,22 +53,23 @@ export default function CartPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-xs text-sage-600 font-body uppercase tracking-wide mb-0.5">{item.category}</p>
                       <h3 className="font-display text-base text-cocoa-800 leading-snug mb-1">{item.name}</h3>
+                      {item.selectedVariant && <p className="text-xs text-cocoa-700/60 font-body">{item.selectedVariant.label}</p>}
                       {item.ageRange && <p className="text-xs text-cocoa-700/50 font-body">Ages: {item.ageRange}</p>}
                       <div className="flex items-center justify-between mt-3">
                         <div className="flex items-center gap-2 bg-cream-100 rounded-full px-3 py-1.5">
-                          <button onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                          <button onClick={() => updateQuantity(item.cartItemId, item.quantity - 1)}
                             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-cream-300 transition-colors">
                             <Minus size={12} />
                           </button>
                           <span className="w-6 text-center text-sm font-medium font-body">{item.quantity}</span>
-                          <button onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                          <button onClick={() => updateQuantity(item.cartItemId, item.quantity + 1)}
                             className="w-5 h-5 flex items-center justify-center rounded-full hover:bg-cream-300 transition-colors">
                             <Plus size={12} />
                           </button>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="font-display text-lg text-cocoa-800">₹{(item.price * item.quantity).toFixed(0)}</span>
-                          <button onClick={() => removeItem(item.id)} className="text-cocoa-700/30 hover:text-red-400 transition-colors">
+                          <button onClick={() => removeItem(item.cartItemId)} className="text-cocoa-700/30 hover:text-red-400 transition-colors">
                             <Trash2 size={16} />
                           </button>
                         </div>

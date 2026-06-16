@@ -13,7 +13,17 @@ type SnapshotOrder = {
   customerName: string;
   email: string;
   paymentMethod: string;
-  items: Array<{ productId: string; name: string; image: string; category: string; price: number; quantity: number }>;
+  items: Array<{
+    productId: string;
+    cartItemId?: string;
+    name: string;
+    image: string;
+    category: string;
+    price: number;
+    quantity: number;
+    variantId?: string;
+    variantLabel?: string;
+  }>;
   subtotal: number;
   shipping: number;
   discount: number;
@@ -192,7 +202,7 @@ export default function OrderSuccessPage() {
                 <h2 className="font-display text-lg text-cocoa-800 mb-4">Items Ordered</h2>
                 <div className="space-y-3">
                   {resolved.items.map((item) => (
-                    <div key={`${item.productId}-${item.name}`} className="flex items-center gap-3">
+                    <div key={item.cartItemId || `${item.productId}-${item.variantId || item.name}`} className="flex items-center gap-3">
                       <Image
                         src={item.image}
                         alt={`${item.name} ordered product`}
@@ -204,6 +214,7 @@ export default function OrderSuccessPage() {
                       />
                       <div className="flex-1">
                         <p className="text-sm font-medium text-cocoa-800 font-body">{item.name}</p>
+                        {item.variantLabel && <p className="text-xs text-cocoa-700/60 font-body">{item.variantLabel}</p>}
                         <p className="text-xs text-cocoa-700/50 font-body">Qty: {item.quantity}</p>
                       </div>
                       <span className="font-display text-sm text-cocoa-800">₹{(item.price * item.quantity).toFixed(0)}</span>

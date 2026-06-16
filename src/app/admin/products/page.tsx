@@ -1,7 +1,7 @@
 'use client';
 import { ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { Plus, Search, Edit2, Trash2, Eye, ChevronDown, Star, Upload, X, FileJson } from 'lucide-react';
-import { Product } from '@/lib/data';
+import { Product, ProductVariant, getVariantLabel } from '@/lib/data';
 import AdminLayout from '@/components/admin/AdminLayout';
 import Link from 'next/link';
 import { removeProduct, saveProduct, subscribeProducts } from '@/lib/products';
@@ -24,6 +24,7 @@ const emptyProduct: Omit<Product, 'id'> = {
   features: [],
   ageRange: '',
   newArrival: false,
+  variants: [],
 };
 
 function normalizeImageUrl(value: string) {
@@ -54,6 +55,89 @@ const ALLOWED_IMAGE_EXTENSIONS = new Set(['jpg', 'jpeg', 'png', 'webp']);
 
 function normalizeProductName(value: unknown) {
   return String(value || '').trim().toLowerCase();
+}
+
+function dedupeStrings(values: string[]) {
+  return values.filter((value, index, items) => value && items.indexOf(value) === index);
+}
+
+function normalizeVariantId(value: unknown, fallback: string) {
+  const normalized = String(value || '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+  return normalized || fallback;
+}
+
+function normalizeVariantCandidate(input: unknown, index: number): { variant?: ProductVariant; errors: string[] } {
+  if (!input || typeof input !== 'object' || Array.isArray(input)) {
+    return { errors: [`Variant ${index + 1}: must be an object.`] };
+  }
+
+  const record = input as Record<string, unknown>;
+  const color = String(record.color || '').trim() || undefined;
+  const size = String(record.size || '').trim() || undefined;
+  const label = getVariantLabel({
+    label: String(record.label || '').trim(),
+    color,
+    size,
+  });
+  const price = Number(record.price);
+  const originalPriceRaw = record.originalPrice;
+  const originalPrice =
+    originalPriceRaw === undefined || originalPriceRaw === null || String(originalPriceRaw).trim() === ''
+      ? undefined
+      : Number(originalPriceRaw);
+  const image = normalizeImageUrl(String(record.image || '').trim());
+  const imagesRaw = record.images;
+  const images = Array.isArray(imagesRaw)
+    ? imagesRaw.map((item) => normalizeImageUrl(String(item).trim())).filter(Boolean)
+    : imagesRaw === undefined
+      ? []
+      : null;
+
+  const normalizedImages = dedupeStrings([image, ...(images || [])].filter(Boolean));
+  const errors: string[] = [];
+  if (!label) errors.push(`Variant ${index + 1}: label, color, or size is required.`);
+  if (!Number.isFinite(price) || price < 0) errors.push(`Variant ${index + 1}: price must be a valid non-negative number.`);
+  if (originalPrice !== undefined && (!Number.isFinite(originalPrice) || originalPrice < 0)) {
+    errors.push(`Variant ${index + 1}: originalPrice must be a valid non-negative number when provided.`);
+  }
+  if (imagesRaw !== undefined && !Array.isArray(imagesRaw)) {
+    errors.push(`Variant ${index + 1}: images must be an array of strings when provided.`);
+  }
+  if (!normalizedImages.length) errors.push(`Variant ${index + 1}: image or images is required.`);
+
+  if (errors.length) return { errors };
+
+  return {
+    errors: [],
+    variant: {
+      id: normalizeVariantId(record.id, `variant-${index + 1}`),
+      label,
+      color,
+      size,
+      price,
+      originalPrice,
+      image: normalizedImages[0],
+      images: normalizedImages,
+      inStock: record.inStock === undefined ? true : Boolean(record.inStock),
+    },
+  };
+}
+
+function normalizeVariantImagesForForm(variant: ProductVariant): ProductVariant {
+  const normalizedImages = dedupeStrings(
+    (variant.images?.length ? variant.images : [variant.image]).map((item) => normalizeImageUrl(item)).filter(Boolean)
+  );
+  return {
+    ...variant,
+    id: normalizeVariantId(variant.id || variant.label, 'variant'),
+    label: getVariantLabel(variant),
+    image: normalizedImages[0] || '',
+    images: normalizedImages,
+  };
 }
 
 function validateImportedProduct(input: unknown): { product?: ProductImportCandidate; errors: string[] } {
@@ -110,7 +194,23 @@ function validateImportedProduct(input: unknown): { product?: ProductImportCandi
     errors.push('images must be an array of strings when provided');
   }
   const normalizedImages = [mainImage, ...(images || [])].filter(Boolean).filter((value, index, arr) => arr.indexOf(value) === index);
-  if (!normalizedImages.length) errors.push('image or images is required');
+  const variantsRaw = record.variants;
+  const variants = Array.isArray(variantsRaw)
+    ? variantsRaw
+        .map((variant, index) => normalizeVariantCandidate(variant, index))
+    : variantsRaw === undefined
+      ? []
+      : null;
+  if (variantsRaw !== undefined && !Array.isArray(variantsRaw)) {
+    errors.push('variants must be an array of objects when provided');
+  }
+  if (variants) {
+    variants.forEach(({ errors: variantErrors }) => errors.push(...variantErrors));
+  }
+  const normalizedVariants = (variants || [])
+    .map((entry) => entry.variant)
+    .filter((variant): variant is ProductVariant => Boolean(variant));
+  if (!normalizedImages.length && normalizedVariants.length === 0) errors.push('image, images, or variants with images is required');
 
   if (record.badge !== undefined && typeof record.badge !== 'string') {
     errors.push('badge must be a string when provided');
@@ -143,6 +243,7 @@ function validateImportedProduct(input: unknown): { product?: ProductImportCandi
       ageRange: record.ageRange ? String(record.ageRange).trim() : undefined,
       inStock: Boolean(inStock),
       newArrival: typeof record.newArrival === 'boolean' ? record.newArrival : false,
+      variants: normalizedVariants,
     },
   };
 }
@@ -206,6 +307,30 @@ async function uploadImageFromUrl(imageUrl: string) {
   return data.data.url as string;
 }
 
+async function uploadProductFiles(files: File[]) {
+  return Promise.all(
+    files.map(async (file) => {
+      const body = new FormData();
+      body.append('file', file);
+      const response = await fetch('/api/admin/upload-product-image', {
+        method: 'POST',
+        body,
+      });
+      const raw = await response.text();
+      let data: any = null;
+      try {
+        data = raw ? JSON.parse(raw) : null;
+      } catch {
+        data = null;
+      }
+      if (!response.ok || !data?.ok || !data?.data?.url) {
+        throw new Error(data?.error || `Image upload failed (HTTP ${response.status}).`);
+      }
+      return data.data.url as string;
+    })
+  );
+}
+
 async function resolveImportedImageUrl(imageUrl: string) {
   const normalized = normalizeImageUrl(imageUrl);
   if (!normalized) throw new Error('Image URL is empty.');
@@ -238,15 +363,46 @@ async function resolveImportedProductImages(product: ProductImportCandidate) {
     }
   }
 
-  if (!resolvedImages.length) {
+  const resolvedVariants: ProductVariant[] = [];
+  for (let index = 0; index < (product.variants || []).length; index += 1) {
+    const variant = (product.variants || [])[index];
+    const variantImages = (variant.images?.length ? variant.images : [variant.image]).filter(Boolean);
+    const nextVariantImages: string[] = [];
+    for (const imageUrl of variantImages) {
+      try {
+        const resolved = await resolveImportedImageUrl(imageUrl);
+        nextVariantImages.push(resolved);
+      } catch (error: any) {
+        const message = error?.message || 'Image processing failed.';
+        imageFailures.push(`${product.name} / ${variant.label || `Variant ${index + 1}`}: ${imageUrl} - ${message}`);
+      }
+    }
+    if (nextVariantImages.length) {
+      resolvedVariants.push({
+        ...variant,
+        image: nextVariantImages[0],
+        images: dedupeStrings(nextVariantImages),
+      });
+    }
+  }
+
+  if (!resolvedImages.length && !resolvedVariants.length) {
     throw new Error('No valid images remained after image processing.');
   }
+
+  const defaultVariant = resolvedVariants.find((variant) => variant.inStock) || resolvedVariants[0];
+  const productImages = dedupeStrings(resolvedImages);
+  const fallbackImages = defaultVariant?.images || [];
 
   return {
     product: {
       ...product,
-      image: resolvedImages[0],
-      images: resolvedImages,
+      price: defaultVariant?.price ?? product.price,
+      originalPrice: defaultVariant?.originalPrice ?? product.originalPrice,
+      image: productImages[0] || defaultVariant?.image || '',
+      images: productImages.length ? productImages : fallbackImages,
+      inStock: defaultVariant ? resolvedVariants.some((variant) => variant.inStock) : product.inStock,
+      variants: resolvedVariants,
     },
     imageFailures,
   };
@@ -273,6 +429,7 @@ export default function AdminProductsPage() {
   const [form, setForm] = useState<Omit<Product, 'id'>>(emptyProduct);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [variantUploadError, setVariantUploadError] = useState('');
   const [jsonImporting, setJsonImporting] = useState(false);
   const [importStatus, setImportStatus] = useState<ImportStatus | null>(null);
   const jsonInputRef = useRef<HTMLInputElement | null>(null);
@@ -320,12 +477,21 @@ export default function AdminProductsPage() {
       ...product,
       image: normalizedImage || normalizedImages[0] || '',
       images: normalizedImages,
+      variants: (product.variants || []).map((variant) => normalizeVariantImagesForForm(variant)),
     });
     setShowModal(true);
   };
 
   const onSave = async () => {
     const images = (form.images || []).filter(Boolean);
+    const variants = (form.variants || [])
+      .map((variant, index) => ({
+        ...normalizeVariantImagesForForm(variant),
+        id: normalizeVariantId(variant.id || variant.label, `variant-${index + 1}`),
+        label: getVariantLabel(variant),
+      }))
+      .filter((variant) => variant.label && variant.image);
+    const defaultVariant = variants.find((variant) => variant.inStock) || variants[0];
     const features = (form.features || [])
       .flatMap((item) => String(item).split(','))
       .map((item) => item.trim())
@@ -333,11 +499,15 @@ export default function AdminProductsPage() {
     const isEdit = Boolean(editProduct?.id);
     await saveProduct({
       ...form,
-      image: images[0] || form.image,
-      images,
+      price: defaultVariant?.price ?? form.price,
+      originalPrice: defaultVariant?.originalPrice ?? form.originalPrice,
+      image: images[0] || defaultVariant?.image || form.image,
+      images: images.length ? dedupeStrings(images) : defaultVariant?.images || [],
       features,
       rating: Number.isFinite(form.rating) ? form.rating : 0,
       reviews: Number.isFinite(form.reviews) ? form.reviews : 0,
+      inStock: defaultVariant ? variants.some((variant) => variant.inStock) : form.inStock,
+      variants,
       id: editProduct?.id,
     });
     const actor = getAdminActorSnapshot();
@@ -351,32 +521,48 @@ export default function AdminProductsPage() {
     setShowModal(false);
   };
 
+  const addVariant = () => {
+    setForm((prev) => ({
+      ...prev,
+      variants: [
+        ...(prev.variants || []),
+        {
+          id: `variant-${(prev.variants?.length || 0) + 1}`,
+          label: '',
+          color: '',
+          size: '',
+          price: prev.price || 0,
+          originalPrice: prev.originalPrice,
+          image: '',
+          images: [],
+          inStock: true,
+        },
+      ],
+    }));
+  };
+
+  const updateVariant = (index: number, updater: (variant: ProductVariant) => ProductVariant) => {
+    setForm((prev) => ({
+      ...prev,
+      variants: (prev.variants || []).map((variant, variantIndex) =>
+        variantIndex === index ? updater(variant) : variant
+      ),
+    }));
+  };
+
+  const removeVariant = (index: number) => {
+    setForm((prev) => ({
+      ...prev,
+      variants: (prev.variants || []).filter((_, variantIndex) => variantIndex !== index),
+    }));
+  };
+
   const onImageUpload = async (files: FileList | null) => {
     if (!files?.length) return;
     setUploading(true);
     setUploadError('');
     try {
-      const uploaded = await Promise.all(
-        Array.from(files).map(async (file) => {
-          const body = new FormData();
-          body.append('file', file);
-          const response = await fetch('/api/admin/upload-product-image', {
-            method: 'POST',
-            body,
-          });
-          const raw = await response.text();
-          let data: any = null;
-          try {
-            data = raw ? JSON.parse(raw) : null;
-          } catch {
-            data = null;
-          }
-          if (!response.ok || !data?.ok || !data?.data?.url) {
-            throw new Error(data?.error || `Image upload failed (HTTP ${response.status}).`);
-          }
-          return data.data.url as string;
-        })
-      );
+      const uploaded = await uploadProductFiles(Array.from(files));
       setForm((prev) => {
         const images = [...(prev.images || []), ...uploaded].map((img) => normalizeImageUrl(img)).filter(Boolean);
         return { ...prev, image: images[0] || prev.image, images };
@@ -385,6 +571,25 @@ export default function AdminProductsPage() {
       const code = error?.code ? ` (${error.code})` : '';
       const message = error?.message || 'Image upload failed.';
       setUploadError(`${message}${code}`);
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const onVariantImageUpload = async (index: number, files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    setVariantUploadError('');
+    try {
+      const uploaded = await uploadProductFiles(Array.from(files));
+      updateVariant(index, (current) => {
+        const images = dedupeStrings([...(current.images || []), ...uploaded].map((img) => normalizeImageUrl(img)).filter(Boolean));
+        return { ...current, image: images[0] || current.image, images };
+      });
+    } catch (error: any) {
+      const code = error?.code ? ` (${error.code})` : '';
+      const message = error?.message || 'Variant image upload failed.';
+      setVariantUploadError(`${message}${code}`);
     } finally {
       setUploading(false);
     }
@@ -401,6 +606,20 @@ export default function AdminProductsPage() {
     setForm((prev) => {
       const images = [imageUrl, ...(prev.images || []).filter((img) => img !== imageUrl)];
       return { ...prev, image: imageUrl, images };
+    });
+  };
+
+  const removeVariantImage = (index: number, imageUrl: string) => {
+    updateVariant(index, (current) => {
+      const images = (current.images || []).filter((img) => img !== imageUrl);
+      return { ...current, images, image: images[0] || '' };
+    });
+  };
+
+  const setVariantPrimaryImage = (index: number, imageUrl: string) => {
+    updateVariant(index, (current) => {
+      const images = [imageUrl, ...(current.images || []).filter((img) => img !== imageUrl)];
+      return { ...current, image: imageUrl, images };
     });
   };
 
@@ -784,6 +1003,177 @@ export default function AdminProductsPage() {
                       </div>
                     ))}
                   </div>
+                )}
+              </div>
+              <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500">Variants</h3>
+                  <button
+                    type="button"
+                    onClick={addVariant}
+                    className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                  >
+                    <Plus size={13} /> Add Variant
+                  </button>
+                </div>
+                {!!form.variants?.length && (
+                  <div className="space-y-4">
+                    {form.variants.map((variant, index) => (
+                      <div key={`${variant.id || 'variant'}-${index}`} className="rounded-2xl border border-slate-200 p-4 space-y-3">
+                        <div className="flex items-center justify-between gap-3">
+                          <p className="text-sm font-medium text-slate-800">
+                            Variant {index + 1}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => removeVariant(index)}
+                            className="text-xs font-medium text-red-500 hover:text-red-600"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <input
+                            value={variant.label}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({ ...current, label: e.target.value }))
+                            }
+                            placeholder="Variant label (example: Sky Blue / S)"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                          />
+                          <input
+                            value={variant.id}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({ ...current, id: e.target.value }))
+                            }
+                            placeholder="Variant ID"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                          />
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <input
+                            value={variant.color || ''}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({ ...current, color: e.target.value }))
+                            }
+                            placeholder="Color option"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                          />
+                          <input
+                            value={variant.size || ''}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({ ...current, size: e.target.value }))
+                            }
+                            placeholder="Size option"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                          />
+                        </div>
+                        <div className="grid sm:grid-cols-2 gap-3">
+                          <input
+                            type="number"
+                            value={variant.price}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({ ...current, price: Number(e.target.value) }))
+                            }
+                            placeholder="Variant price"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                          />
+                          <input
+                            type="number"
+                            value={variant.originalPrice || ''}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({
+                                ...current,
+                                originalPrice: e.target.value ? Number(e.target.value) : undefined,
+                              }))
+                            }
+                            placeholder="Variant original price"
+                            className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                          />
+                        </div>
+                        <input
+                          value={variant.image}
+                          onChange={(e) =>
+                            updateVariant(index, (current) => {
+                              const next = normalizeImageUrl(e.target.value);
+                              const images = dedupeStrings([next, ...((current.images || []).filter((img) => img !== next))].filter(Boolean));
+                              return { ...current, image: next, images };
+                            })
+                          }
+                          placeholder="Variant main image URL"
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                        />
+                        <label className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-slate-300 bg-slate-50 px-4 py-4 text-sm text-slate-600 cursor-pointer hover:border-blush-300 hover:bg-blush-50/40">
+                          <Upload size={16} className="text-slate-400" />
+                          <span>{uploading ? 'Uploading variant images...' : 'Upload variant images'}</span>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            multiple
+                            disabled={uploading}
+                            onChange={(e) => onVariantImageUpload(index, e.target.files)}
+                            className="hidden"
+                          />
+                        </label>
+                        <textarea
+                          value={(variant.images || []).join(', ')}
+                          onChange={(e) =>
+                            updateVariant(index, (current) => {
+                              const images = dedupeStrings(
+                                e.target.value
+                                  .split(',')
+                                  .map((item) => normalizeImageUrl(item))
+                                  .filter(Boolean)
+                              );
+                              return { ...current, images, image: images[0] || current.image };
+                            })
+                          }
+                          rows={2}
+                          placeholder="Variant gallery image URLs separated by commas"
+                          className="w-full px-4 py-2.5 rounded-xl border border-slate-200"
+                        />
+                        {variantUploadError && (
+                          <p className="text-sm text-red-500 font-body">{variantUploadError}</p>
+                        )}
+                        {!!variant.images?.length && (
+                          <div className="grid grid-cols-4 gap-3">
+                            {variant.images.map((img) => (
+                              <div key={`${variant.id}-${img}`} className="relative group aspect-square rounded-xl overflow-hidden border border-slate-200">
+                                <button type="button" onClick={() => setVariantPrimaryImage(index, img)} className="w-full h-full">
+                                  <img src={normalizeImageUrl(img) || '/Images/Logo.png'} alt="" className="w-full h-full object-cover" />
+                                </button>
+                                {img === variant.image && (
+                                  <span className="absolute left-1.5 bottom-1.5 rounded-md bg-blush-500 px-1.5 py-0.5 text-[10px] text-white">Main</span>
+                                )}
+                                <button
+                                  type="button"
+                                  onClick={() => removeVariantImage(index, img)}
+                                  className="absolute right-1.5 top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-white/90 text-slate-600 shadow-sm hover:text-red-500"
+                                >
+                                  <X size={13} />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <label className="flex items-center gap-2 text-sm text-slate-700">
+                          <input
+                            type="checkbox"
+                            checked={variant.inStock}
+                            onChange={(e) =>
+                              updateVariant(index, (current) => ({ ...current, inStock: e.target.checked }))
+                            }
+                          />
+                          Variant in stock
+                        </label>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {!form.variants?.length && (
+                  <p className="text-sm text-slate-500">
+                    Add variants if this product has color or size options with different prices and images.
+                  </p>
                 )}
               </div>
               <label className="flex items-center gap-2 rounded-xl border border-slate-200 px-3 py-2.5 w-fit"><input type="checkbox" checked={form.inStock} onChange={(e) => setForm({ ...form, inStock: e.target.checked })} />In Stock</label>
